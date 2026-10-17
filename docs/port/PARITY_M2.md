@@ -500,3 +500,65 @@ UTF-8 截断、scratch 接线、stderr/exit code、超时杀树、gate 集成、
    行）已随 BACKGROUND_PROGRESS_GUIDANCE 文案入库，解析器接线后台任务
    状态流随批次五。
 5. Windows cmd.exe 路径不移植（目标环境 darwin/linux）。
+
+## M3 批次四：webfetch / websearch / mcp
+
+移植范围（tool/webfetch.rs 539 行 + tool/websearch.rs 892 行 +
+tool/mcp.rs 1156 行 + jcode-base/src/mcp/tool.rs dispatch 命名与
+protocol.rs/client.rs stdio 主路径）→ `internal/tools/webfetch.go`、
+`internal/tools/websearch.go`、`internal/tools/mcp.go`、`internal/mcp`：
+
+1. **webfetch**：URL 校验（http/https 前缀）、30s 默认/120s 上限秒超时、
+   5MB 流式读取上限（Content-Length 预检 + 分块截断）、UA
+   "Mozilla/5.0 (compatible; JCode/1.0)"、三格式（html 原样/text/markdown，
+   markdown 仅对 text/html 转换）、40000 字符截断（字符边界 + 优先最后
+   换行 > 50% 处）、"(output truncated to N of M chars…)" 尾注。
+   HTML 转换移植上游静态正则全家：script/style/注释剥离、10 个
+   non-prose chrome 标签（nav/aside/form/noscript/svg/iframe/template/
+   select/dialog/canvas——刻意不含 header/footer，文章署名保留）、
+   属性值含 `>` 的标签正则（Parsoid data-mw JSON 不泄漏）、链接渲染
+   （空文本丢弃、#fragment 丢弃、>300 字符 URL 只留锚文本）、
+   strong/em/code/pre>code、空 bullet 清理、实体解码。
+2. **websearch**：DDG POST 表单（GET 已被反 bot 拦截——上游 #shape 注释
+   同款修复）、anti-bot 挑战页检测（anomaly/captcha/cloudflare 10 标记，
+   HTTP 200 + 零结果歧义消除）、Bing API key（GCODE_BING_API_KEY）→
+   b_algo HTML 抓取回退、SearXNG JSON 端点（GCODE_SEARXNG_URL）、custom
+   模板（GCODE_WEBSEARCH_CUSTOM_URL，SearXNG 形状）、引擎顺序
+   （`native` 不本地执行 → duckduckgo+bing 回退、去重保序）、
+   GCODE_WEBSEARCH_FALLBACKS 空格分隔回退链、uddg= URL 解包、
+   实体解码 7 项、"No results found" 引导文案。
+3. **mcp**：dispatch_name（`mcp__server__tool`、非 [A-Za-z0-9_] 全部
+   归一 `_`（含连字符）、64 上限 + FNV-1a `server\0tool` 稳定哈希后缀、
+   冲突 `-2` 后缀唯一化）→ `internal/mcp`；JSON-RPC 2.0 stdio 客户端
+   （换行分帧、initialize 握手 2024-11-05、notifications/initialized、
+   tools/list、tools/call、通知行跳过）；Manager（GCODE_HOME/config.toml
+   [mcp_servers.*] 表解析 command/args/url、connect/disconnect/list 生命周期、
+   connect 序目录）；mcp_search（MatchRank Name>Description、description-only
+   命中在存在 name 命中时整体丢弃、fit_search_results 三段预算收敛：
+   全量→描述对半 clip 至 120 下限→前缀全详 + 尾部 name-only、
+   estimate_tokens=(chars+3)/4、6k token 预算、accept_large_output 逃生、
+   tool_references metadata ≤32）；mcp_call（content 块文本拼接、
+   isError→error、空输出文案、mcp__ 别名）；mcp 管理（list/connect/
+   disconnect）。
+
+测试：webfetch 6 例（chrome 剥离、header/footer 保留、链接渲染、注释/
+属性泄漏、截断含多字节边界）、websearch 6 例（Bing HTML/DDG HTML/
+SearXNG 形状解析、anti-bot 双检测、引擎顺序 native 回退+去重）、
+mcp 9 例（dispatch 归一/哈希/冲突、rank 三态、fit 预算、call 渲染、
+stdio 端到端假 server、config 表解析、Manager 生命周期）。全绿，全仓
+gate 通过，已推送。
+
+文档化偏差（M3 批次四）：
+
+1. MCP 远程传输（streamable HTTP/SSE）与 OAuth 流（remote.rs/oauth.rs
+   约 2.4k 行）未移植——`url` 字段解析后报"仅支持 stdio server"；随
+   后续批次补齐。
+2. mcp pool/schema_cache/budget（进程池、schema 缓存、输出预算细控）
+   以简化 Manager 代替；MCP 输出 25k token 上限未移植。
+3. websearch custom 配置取环境变量（GCODE_WEBSEARCH_CUSTOM_URL）而非
+   config.websearch.custom 完整结构（headers/方法/JSON pointer 映射
+   简化为 SearXNG 形状直读）。
+4. 会话级 MCP alias allow/deny（registry 钩子）未接——随 agent 主循环
+   批次五接线 toolcore.ToolContext 时补。
+5. DDG/Bing 请求头与上游逐字一致（UA/Accept/Content-Type）；SearXNG
+   json format 参数依赖实例配置。
