@@ -562,3 +562,56 @@ gate 通过，已推送。
    批次五接线 toolcore.ToolContext 时补。
 5. DDG/Bing 请求头与上游逐字一致（UA/Accept/Content-Type）；SearXNG
    json format 参数依赖实例配置。
+
+## M3 批次五：agent 主循环（M3 收官）
+
+移植范围（agent.rs 1226 行 + agent/turn_loops.rs / turn_execution.rs /
+tools.rs 主路径）→ `internal/agent`：
+
+1. **registry.go**（tool/registry.rs 面）：精确名 + MCP dispatch 别名路由、
+   首注册胜出、注册序 Definitions（EnsureIntentInSchema 注入）、
+   validation_error 移植（malformed/non-object JSON → user 侧 error
+   tool_result，重置 malformed 轮计数语义随钩子补）。
+2. **agent.go**（run_once + run_turn 主循环）：流式消费
+   （TextDelta/TextSuffixReplace 后缀替换/ToolUseStart 去重/ToolInputDelta
+   per-id 聚合/UseEnd finalized→ToolCall/MessageEnd/TokenUsage）、
+   助手消息 tool_use 块持久化（thought_signature 保留经 ToToolUseBlock）、
+   无 tool call 即终结文本；有则逐个执行（toolcore.ToolContext
+   ExecutionAgentTurn + WorkingDir）并以 user ToolResultBlock 回填、
+   工具输出历史上限 512*1024 字符 + 上游截断告示原文、未知工具/校验失败
+   → error result 进 transcript 而非中断、空输出文案。
+3. **重试/防呆阶梯（常量级对拍）**：MAX_CONTEXT_LIMIT_RETRIES=5（
+   context-limit 错误分类器 8 关键词 → 重试）；MAX_EMPTY_POST_TOOL_
+   CONTINUATION_ATTEMPTS=5（工具结果后瞬时空响应不静默终结——空助手
+   消息不入 transcript，保证下次请求仍以 tool result 结尾）；批处理催促
+   （连续 3 轮单工具 → BATCH_NUDGE system-reminder 注入下一请求，batch
+   工具在册才注入）；MaxTurns 安全阀（0=上游无界）。
+4. **锁表面**：LockTools 首请求冻结工具列表（MCP 异步注册不破缓存，
+   #206 语义简化为手动 UnlockTools）；compaction/reset 解锁。
+
+测试 9 例（脚本化 Provider 多轮全链路、批处理催促注入捕获、空响应
+防呆 5 连退避、context-limit 重试上界、malformed 输入、512k 历史上限、
+未知工具、别名路由）。全绿，全仓 gate 通过，已推送。
+
+文档化偏差（M3 批次五）：
+
+1. TUI 双向面未接：soft interrupt queue / graceful shutdown signal /
+   background tool signal / stdin_request 通道以字段位保留（nil 默认），
+   随 TUI 批次接线；bus ToolEvent 简化为 OnToolStart/OnToolEnd 钩子。
+2. memory 注入、KV-cache monitor、cache_tracker、provider-native items
+   回放、SDK tool results、compaction 联动（auto-compact 保留重试计数
+   外壳）随 M4/后续批次。
+3. tool_markup_recovery（模型输出 `<>` 包裹工具调用的恢复解析）、
+   response_recovery（截断 JSON 修复）、interrupts 精细分类未移植。
+4. idle_hibernation/inline_tail/status/streaming（TUI 流式渲染协作）
+   属 TUI 批次。
+5. 命令面（print 模式 CLI、session 命令）随 M4 会话存储后接。
+
+## M3 里程碑小结
+
+M0–M3 全部落地：协议层（types）、Provider 层（anthropic/openai/gemini +
+OAuth）、核心工具（read/write/edit/ls/diff/glob/grep/agentgrep/webfetch/
+websearch/mcp/bash + destructive gate）、agent 主循环、会话外设
+（config/lock/pdf/imaging/embedding）。TUI 行为等价口径、外围集成按
+计划不做。后续批次：M4 SQLite 会话存储 + jcode 互操作、MCP 远程传输/
+OAuth、tool_markup_recovery、agent memory/compaction 接线。
