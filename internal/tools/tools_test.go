@@ -373,3 +373,117 @@ func jsonInt(n int) string {
 	encoded, _ := json.Marshal(n)
 	return string(encoded)
 }
+
+// Ported: build_grep_args_includes_scope_flags / exact-file scoping tests.
+func TestAgentGrepToolModes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "app.rs"),
+		[]byte("fn auth_status() {}\nfn other() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := directContext(t, dir)
+	tool := NewAgentGrepTool()
+
+	output, err := tool.Execute(mustJSON(t, map[string]any{
+		"query": "auth_status", "type": "rs",
+	}), ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(output.Output, "query: auth_status\n") ||
+		!contains(output.Output, "matches: 1 in 1 files") {
+		t.Fatalf("grep output: %s", output.Output)
+	}
+	if !contains(output.Output, "- function auth_status @ 1-") {
+		t.Fatalf("group header: %s", output.Output)
+	}
+
+	// paths_only renders bare paths.
+	output, err = tool.Execute(mustJSON(t, map[string]any{
+		"query": "other", "paths_only": true,
+	}), ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Output != "src/app.rs" && output.Output != filepath.Join("src", "app.rs") {
+		t.Fatalf("paths_only: %q", output.Output)
+	}
+
+	// mode defaults to grep; find requires query or scope.
+	output, err = tool.Execute(mustJSON(t, map[string]any{
+		"query": "app", "mode": "find", "max_files": 5,
+	}), ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(output.Output, "top files: 1") || !contains(output.Output, "role: implementation") {
+		t.Fatalf("find output: %s", output.Output)
+	}
+
+	if _, err = tool.Execute(mustJSON(t, map[string]any{"mode": "find"}), ctx); err == nil ||
+		!contains(err.Error(), "requires 'query' unless path, glob, or type") {
+		t.Fatalf("find rejection: %v", err)
+	}
+
+	// outline via file-valued path.
+	output, err = tool.Execute(mustJSON(t, map[string]any{
+		"mode": "outline", "path": "src/app.rs",
+	}), ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(output.Output, "language: rust") || !contains(output.Output, "symbols: 2") {
+		t.Fatalf("outline: %s", output.Output)
+	}
+	if _, err = tool.Execute(mustJSON(t, map[string]any{"mode": "outline"}), ctx); err == nil ||
+		!contains(err.Error(), "requires 'file'") {
+		t.Fatalf("outline rejection: %v", err)
+	}
+
+	// file scopes grep to that exact file only.
+	output, err = tool.Execute(mustJSON(t, map[string]any{
+		"query": "fn", "file": "src/app.rs",
+	}), ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(output.Output, "matches: 2 in 1 files") {
+		t.Fatalf("file-scoped grep: %s", output.Output)
+	}
+
+	// unknown mode and trace rejection.
+	if _, err = tool.Execute(mustJSON(t, map[string]any{
+		"query": "x", "mode": "bogus",
+	}), ctx); err == nil || !contains(err.Error(), "Unsupported agentgrep mode") {
+		t.Fatalf("bogus mode: %v", err)
+	}
+	if _, err = tool.Execute(mustJSON(t, map[string]any{
+		"mode": "trace", "terms": []string{"subject:x"},
+	}), ctx); err == nil || !contains(err.Error(), "not available in this build") {
+		t.Fatalf("trace: %v", err)
+	}
+
+	// schema omits internal knobs (session cwd, context json).
+	schema := string(tool.ParametersSchema())
+	if contains(schema, "context") || contains(schema, "session") {
+		t.Fatalf("schema leaks internals: %s", schema)
+	}
+}
+
+// Ported: agentgrep_rejects_missing_session_cwd_instead_of_using_process_cwd.
+func TestAgentGrepRequiresSessionCwd(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "x.txt"), []byte("hit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := directContext(t, dir)
+	ctx.WorkingDir = ""
+	if _, err := NewAgentGrepTool().Execute(mustJSON(t, map[string]any{
+		"query": "hit",
+	}), ctx); err == nil || !contains(err.Error(), "requires a session working directory") {
+		t.Fatalf("cwd guard: %v", err)
+	}
+}
