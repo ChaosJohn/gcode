@@ -282,8 +282,30 @@ prompt 拦截、ListModels 发现 + 目录缓存）。
    JCODE_GEMINI_USER_AGENT→GCODE_GEMINI_USER_AGENT、
    JCODE_GEMINI_PROJECT→GCODE_GEMINI_PROJECT（D4 写侧改名）。
 
+## 批次五：provider 门面（provider-core trait 核心）
+
+移植范围（provider-core Provider trait 的 M3 消费子集）→
+`internal/provider/provider.go` + `adapters.go`：
+
+1. Provider 接口：Name/Model/SetModel/AvailableModels/
+   SupportsImageInput/SupportsCompaction/Fork/InvalidateCredentials/
+   Complete(TurnRequest, emit)。OAuth 账户变更器、route selection、
+   catalog sharing identity 随 M4 后账户工作补。
+2. TurnRequest（messages/tools/system/dynamic_system/resume_session_id/
+   max_tokens_override/show_thinking/effort）+ messages_with_dynamic_system_context
+   （`<system_context>` 包裹的 in-band user 消息）。
+3. 三个适配器：claude（catalog = ALL_CLAUDE_MODELS、Complete 装配
+   CompleteConfig/ProviderOptions/RetrySettings）、codex
+   （BuildResponsesInput 组装 Input、resume_session_id→prompt_cache_key、
+   max_tokens_override→MaxOutputTokens）、gemini（静态目录 + IsGeminiModelID
+   校验、Code Assist 状态失效、OnModelSwitch 回写 SetModel、fork 共享
+   HTTP client）。
+
+测试：适配器模型生命周期/fork 隔离/目录校验/dynamic system 包装 5 例。
+
 ## 状态
 
-M2 批次四完成（Gemini provider + Code Assist/Developer API 双路由 +
-schema-dialect 恢复 + 测试全绿）。三大 provider（Anthropic/OpenAI/Gemini）
-均已落地；M2 剩余收尾：provider 门面接线（供 M3 agent loop 选择 provider）。
+M2 完成：三大 provider（Anthropic/OpenAI/Gemini）+ schema-dialect +
+provider 门面全部落地，测试全绿。待推送（批次四的 Gemini CLI 公开
+OAuth client id 触发 GitHub Push Protection，等待仓库所有者在
+secret-scanning unblock 页面放行）。下一步：M3 agent loop + 核心工具。
