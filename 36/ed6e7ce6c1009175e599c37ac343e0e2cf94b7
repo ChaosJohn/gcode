@@ -1,0 +1,28 @@
+internal/cmdrisk/cmdrisk_test.go
+  h_24be5f9e02d8b0 1-244
+internal/cmdrisk/gate.go
+  h_24be5f9e02d8b0 1-87
+internal/cmdrisk/paths.go
+  h_24be5f9e02d8b0 1-236
+internal/cmdrisk/risk.go
+  h_24be5f9e02d8b0 1-526
+internal/cmdrisk/tokenize.go
+  h_24be5f9e02d8b0 1-445
+internal/tools/bash.go
+  h_24be5f9e02d8b0 1-485
+internal/tools/bash_test.go
+  h_24be5f9e02d8b0 1-203
+internal/tools/json_helper_test.go
+  h_24be5f9e02d8b0 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36ed6e7ce6c1009175e599c37ac343e0e2cf94b7",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
