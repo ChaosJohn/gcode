@@ -46,6 +46,21 @@ func (a *Agent) WirePersistence(store *sessionstore.Store) {
 	a.persistStore = store
 }
 
+// SetPersistenceSession re-points persistence at a fresh session under the
+// same home (resume forks into a new id while carrying restored history).
+func (a *Agent) SetPersistenceSession(sessionID string) error {
+	if a.persistStore == nil {
+		return nil
+	}
+	home := a.persistStore.Home()
+	store := sessionstore.NewStore(sessionstore.Session{
+		ID: sessionID, Status: "active", WorkingDir: a.WorkingDir,
+	}, home)
+	a.persistStore = store
+	a.SessionID = sessionID
+	return a.PersistTranscript()
+}
+
 // PersistTranscript syncs the in-memory transcript into the store and saves.
 func (a *Agent) PersistTranscript() error {
 	if a.persistStore == nil {

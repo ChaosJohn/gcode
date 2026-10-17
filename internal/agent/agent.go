@@ -30,6 +30,9 @@ type ToolHooks struct {
 	OnToolStart func(call types.ToolCall)
 	// OnToolEnd fires after execution with a one-line summary.
 	OnToolEnd func(call types.ToolCall, summary string, isErr bool)
+	// OnEvent observes every stream event (CLI/TUI rendering hooks in here;
+	// errors from the callback abort the stream).
+	OnEvent func(event types.StreamEvent) error
 }
 
 // Agent is the turn loop (ported subset of agent.rs): conversation history,
@@ -151,6 +154,11 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 			ShowThinking: true,
 		}
 		err := a.Provider.Complete(turn, func(event types.StreamEvent) error {
+			if a.Hooks.OnEvent != nil {
+				if err := a.Hooks.OnEvent(event); err != nil {
+					return err
+				}
+			}
 			switch e := event.(type) {
 			case types.TextDelta:
 				textContent.WriteString(e.Text)

@@ -41,11 +41,11 @@ type command struct {
 
 var commands = []command{
 	{name: "version", synopsis: "version", summary: "print build information", milestone: ""},
-	{name: "run", synopsis: "run <prompt>", summary: "headless single-shot agent run", milestone: "M3"},
-	{name: "resume", synopsis: "resume [session]", summary: "resume a stored session", milestone: "M4"},
+	{name: "run", synopsis: "run <prompt>", summary: "headless single-shot agent run", milestone: ""},
+	{name: "resume", synopsis: "resume [session] [prompt]", summary: "list sessions or continue one", milestone: ""},
 	{name: "serve", synopsis: "serve", summary: "harness API server mode", milestone: "M4"},
 	{name: "import-jcode", synopsis: "import-jcode [jcode-home]", summary: "import an existing ~/.jcode home", milestone: ""},
-	{name: "doctor", synopsis: "doctor", summary: "provider and environment diagnostics", milestone: "M2"},
+	{name: "doctor", synopsis: "doctor", summary: "provider and environment diagnostics", milestone: ""},
 	{name: "help", synopsis: "help", summary: "show this help", milestone: ""},
 }
 
@@ -65,12 +65,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	case "import-jcode":
 		return runImportJcode(rest, stdout, stderr)
-	case "run", "resume", "serve", "doctor":
+	case "run":
+		return runRun(rest, stdout, stderr)
+	case "resume":
+		return runResume(rest, stdout, stderr)
+	case "doctor":
+		return runDoctor(rest, stdout, stderr)
+	case "serve":
 		c := lookup(cmd)
 		fmt.Fprintf(stderr, "gcode %s: not implemented yet — planned for %s (docs/port/PORT_PLAN.md)\n", cmd, c.milestone)
-		if len(rest) > 0 && cmd == "run" {
-			fmt.Fprintf(stderr, "(received prompt: %q)\n", rest[0])
-		}
 		return exitNotImpl
 	default:
 		fmt.Fprintf(stderr, "gcode: unknown command %q\n\n", cmd)

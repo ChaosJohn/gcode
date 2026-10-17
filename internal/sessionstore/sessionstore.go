@@ -156,6 +156,9 @@ func NewStore(session Session, home string) *Store {
 // Path exposes the snapshot path (test + CLI convenience).
 func (s *Store) Path() string { return s.path }
 
+// Home exposes the sessions base directory this store was opened under.
+func (s *Store) Home() string { return filepath.Dir(filepath.Dir(s.path)) }
+
 // Save persists the session (ports save_inner): checkpoint (full snapshot +
 // journal truncation) when the transcript shrank or metadata changed;
 // otherwise delta entries append to the journal.

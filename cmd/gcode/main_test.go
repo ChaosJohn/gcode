@@ -53,10 +53,7 @@ func TestUnknownCommand(t *testing.T) {
 // milestone, so scripts can distinguish "not ported yet" from misuse.
 func TestPlannedCommandsReportMilestone(t *testing.T) {
 	cases := map[string]string{
-		"run":    "M3",
-		"doctor": "M2",
-		"serve":  "M4",
-		"resume": "M4",
+		"serve": "M4",
 	}
 	for cmd, milestone := range cases {
 		code, _, errOut := runForTest(t, cmd)
