@@ -73,6 +73,7 @@ func TestPlannedCommandsReportMilestone(t *testing.T) {
 // and a real import succeeds end to end.
 func TestImportJcodeCommand(t *testing.T) {
 	t.Setenv("GCODE_HOME", t.TempDir())
+	t.Setenv("JCODE_HOME", filepath.Join(t.TempDir(), "absent"))
 	code, out, _ := runForTest(t, "import-jcode")
 	if code != exitUsage {
 		t.Fatalf("missing home exit = %d, want %d", code, exitUsage)
