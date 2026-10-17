@@ -35,7 +35,7 @@ func SetStorePathForTest(path string) {
 // storePath must be called with quirksMu held.
 func storePath() (string, bool) {
 	if quirksTestPath != "" {
-		return quirksTestPath, true
+		return filepath.Join(quirksTestPath, "schema-quirks.json"), true
 	}
 	if explicit := os.Getenv("GCODE_SCHEMA_QUIRKS_PATH"); explicit != "" {
 		return explicit, true
