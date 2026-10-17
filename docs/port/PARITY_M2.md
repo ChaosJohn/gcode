@@ -123,8 +123,94 @@
    分隔符同为 ": "。
 5. 模型目录缓存刷新（catalog_refresh）未移植；目录静态取 ALL_CLAUDE_MODELS。
 
+## 批次三：schema-dialect + OpenAI provider（Responses API + Codex OAuth）
+
+移植范围：
+
+1. **schema-dialect 子系统**（jcode-schema-dialect，2.4k 行）→
+   `internal/schema/dialect/`：keyword 分类（Subschema/SubschemaMap/
+   SubschemaArray/Data；未知关键字按 Data 防腐）、apply 单一递归
+   （allow-list 过滤、one_of→any_of 改写、const→enum、顶层 combiner 拍平、
+   全深度 combiner 拍平（Antigravity）、allOf 分支合并、悬挂 required 剪除、
+   object 补 properties）、registry 六方言（openai/gemini/anthropic/openrouter/
+   antigravity-claude/antigravity-bridge，全部照抄关键字表）、quirks 持久化
+   （~/.gcode/schema-quirks.json；GCODE_SCHEMA_QUIRKS_PATH/GCODE_HOME 覆盖；
+   load-bearing 关键字永不可丢）。测试：上游 build_tools 三例语义 + anthropic/
+   gemini 变换 + quirks 学习与持久化。
+2. **OpenAI strict schema**（provider-core openai_schema.rs）→
+   `internal/provider/openai/schema.go`：schema_supports_strict（object 无
+   properties、additionalProperties:true/object、无类型 property、无类型
+   combiner 分支、无 items 约束数组、$ref、无类型信息 property 七类 fail-closed）、
+   strict_normalize_schema（全属性 required、可选属性 nullable 化、未知 format
+   剥除、additionalProperties:false）、make_schema_nullable、build_tool/
+   build_tools（deferred 不进顶层 tools）。测试移植上游 strict 五例。
+3. **build_responses_input**（request.rs 全管线）→ `request.go`：user/assistant
+   遍历 → raw items（图片 input_image、compaction 体积守门
+   9,500,000/10,485,760 字符、openai reasoning 重放无 status、web_search_call
+   原样重放/外部 provider_native 降级、function_call + 输出配对/延迟/缺失注入）、
+   open_calls 排水、孤儿输出改写 user message（可丢弃占位符）、安全注入、
+   按 call_id 重排（真实输出胜过占位符）、additional_tools 按 ToolReference
+   插入 function_call_output 之后（前缀字节不变）。测试移植上游 8 例语义。
+4. **SSE 流解码**（stream.rs 1161 行 + citations.rs）→ `stream.go`：
+   Responses 全事件映射（created/output_text.delta/reasoning.delta/added/
+   arguments.delta+done/output_item.done/incomplete/completed/failed/error/
+   [DONE]/websocket fallback 通知/明文断流）、并行工具流状态机（identity 别名
+   output:/call:/item 三键解析、未命名调用不阻塞、done 快照只发未见后缀、
+   快照不一致报错、null/空参数归一化 "{}"）、文本包裹工具调用恢复
+   （to=functions.<name>{...}，suffix 清洗）、reasoning 重放去重
+   （流式过后不再全量重放）、compaction/web_search_call/image_generation_call
+   （落盘 .gcode/generated-images + metadata json）、usage
+   （input_tokens_details/prompt_tokens_details 回退、cache_write 可独立存在）、
+   stop_reason（commentary phase、incomplete_details.reason、status）、
+   citations 渲染（char offset、URL 白名单 http/https、marker U+E200..U+E201
+   整体替换、已渲染 Markdown 去重、无效注解静默保留原文）、UTF-8 分块续解码。
+   测试移植上游 stream_tests 11 例 + stream_tool_tests 14 例 + citations 5 例。
+5. **provider 装配 + Codex OAuth** → `provider.go`/`oauth.go`：
+   build_response_request（instructions/input/tools+hosted/tool_choice/
+   parallel_tool_calls:false/stream/store:false/include reasoning.encrypted_content、
+   API 模式 max_output_tokens、reasoning{effort,summary:auto}、service_tier
+   ultrafast 门控、context_management 压缩阈值、prompt_cache_key/retention
+   （gpt-5.6+ 省略、扩展保留模型默认 24h、in_memory/24h 归一化））、
+   hosted web_search 门控（native_enabled && first_party && 非 codex &&
+   session 有本地 websearch；allowed_domains filters；附加时剔除本地工具）、
+   image_generation（ChatGPT 模式且非 codex）、effort 归一化/default
+   （gpt-5.6-sol→low）/additional_tools 版本门（gpt-5.4+）、端点解析
+   （GCODE_OPENAI_API_BASE→OPENAI_BASE_URL→OPENAI_API_BASE，/responses 去重）、
+   ChatGPT 后端固定 chatgpt.com/backend-api/codex + originator:
+   codex_cli_rs + chatgpt-account-id、Codex OAuth（client
+   app_EMoamEEZ73f0CkXaXp7hrann、auth.openai.com、scopes、1455 端口回调、
+   refresh grant x-www-form-urlencoded）、瞬态重试（MAX_RETRIES=3、base 1s
+   指数退避、RetryRollback 回滚事件、provider-core 瞬态分类器移植到
+   internal/provider/transporterr 共享包）。
+6. **Anthropic 侧接回**：FormatTools 现在经 dialect.Anthropic 归一化
+   input_schema（上游 anthropic_input_schema 等价，顶层 combiner 拍平 +
+   强制 properties map）。
+
+测试统计（批次三新增）：dialect 11 例、openai schema 7 例、request 12 例、
+stream 25 例、citations 5 例、provider 12 例，全绿。
+
+文档化偏差（批次三）：
+
+1. WebSocket 传输（persistent ws、prewarm、healthcheck、compact ws）未移植——
+   仅 HTTPS/SSE 路径；ws 是传输优化，语义等价。
+2. swarm effort 映射（swarm/swarm-deep → API effort 按模型 ladder 解析）未移植：
+   swarm 功能本身不在 M0–M4；NormalizeReasoningEffort 接受哨兵值存储，
+   APIReasoningEffort 拒绝其上网络径。
+3. model catalog 快照依赖（model_selection.rs、openai_model_supports_ultrafast
+   的目录检查、账户可用性 fallback）未移植——ultrafast 门控近似为非 codex
+   放行；目录与可用性随 M4 之后的 catalog 工作补。
+4. native compaction 阈值计算（context_window 感知）接线到 agent 循环时补，
+   请求字段 context_management 已就位。
+5. image_generation 落盘目录用 `.gcode/generated-images`（上游
+   `.jcode/generated-images`，D4 写侧改名）。
+6. 环境变量 JCODE_OPENAI_API_BASE → GCODE_OPENAI_API_BASE（其余
+   OPENAI_* 原样）；quirks 存储 ~/.jcode/schema-quirks.json →
+   ~/.gcode/schema-quirks.json（D4）。
+7. Go net/http 无 reqwest 的 per-request 中间件栈：Retry-After 解析、
+   初始响应超时（initial response timeout）并入 http.Client 超时与错误包装，
+   语义等价（断连包装 "connection closed before response headers" 进瞬态分类）。
+
 ## 状态
 
-M2 Anthropic 部分完成（请求成形/修复/SSE/传输/重试/OAuth/装配 + 测试全绿）。
-剩余：OpenAI provider（Responses API / Chat Completions / ChatGPT OAuth）、
-Gemini provider、schema-dialect 归一化。
+M2 批次三完成（schema-dialect + OpenAI Responses provider + Codex OAuth +
+测试全绿）。剩余：Gemini provider、OpenAI/Gemini OAuth 完整化（批次四）。

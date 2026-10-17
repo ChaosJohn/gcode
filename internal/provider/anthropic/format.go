@@ -4,12 +4,21 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/ChaosJohn/gcode/internal/schema/dialect"
 	"github.com/ChaosJohn/gcode/internal/types"
 )
 
-// FormatTools converts tool definitions to Anthropic API format: OAuth renames
-// a few tools to Claude-Code builtin names, the last eager tool carries the
-// prompt-cache breakpoint, deferred tools move to the end uncached.
+// InputSchema normalizes a tool schema for Anthropic's input_schema: the API
+// accepts draft 2020-12 inside properties but rejects top-level combiners and
+// non-object schemas (ported from anthropic_input_schema).
+func InputSchema(raw json.RawMessage) json.RawMessage {
+	return dialect.NormalizeSchemaJSON(raw, &dialect.Anthropic)
+}
+
+// FormatTools converts tool definitions to Anthropic API format: schemas are
+// normalized for the Anthropic dialect, OAuth renames a few tools to
+// Claude-Code builtin names, the last eager tool carries the prompt-cache
+// breakpoint, deferred tools move to the end uncached.
 func FormatTools(tools []types.ToolDefinition, isOAuth bool, cacheTTL1h bool) []ApiTool {
 	out := make([]ApiTool, 0, len(tools))
 	for _, tool := range tools {
@@ -20,7 +29,7 @@ func FormatTools(tools []types.ToolDefinition, isOAuth bool, cacheTTL1h bool) []
 		out = append(out, ApiTool{
 			Name:         name,
 			Description:  tool.Description,
-			InputSchema:  tool.InputSchema,
+			InputSchema:  InputSchema(tool.InputSchema),
 			DeferLoading: tool.DeferLoading,
 		})
 	}
