@@ -309,3 +309,75 @@ M2 完成：三大 provider（Anthropic/OpenAI/Gemini）+ schema-dialect +
 provider 门面全部落地，测试全绿。待推送（批次四的 Gemini CLI 公开
 OAuth client id 触发 GitHub Push Protection，等待仓库所有者在
 secret-scanning unblock 页面放行）。下一步：M3 agent loop + 核心工具。
+
+---
+
+# M3 对拍报告（agent loop + 核心工具）
+
+## M3 批次一：toolcore 契约 + 基础文件工具
+
+移植范围：
+
+1. **toolcore 契约**（jcode-tool-types + jcode-tool-core）→
+   `internal/toolcore/toolcore.go`：ToolOutput（title/metadata/images）、
+   resolve_tool_name 全别名表（functions. 前缀剥离、shell_exec/Read/multiedit/
+   patch/grep→agentgrep/PascalCase OAuth 别名等）、ensure_intent_in_schema
+   （每个 object schema 中央注入 required `intent` + 可选
+   `accept_large_output` 逃生舱，MCP 代理 schema 同样覆盖）、ToolContext
+   （session/message/tool_call 身份、working_dir 解析、stdin 请求通道、
+   for_subcall 父作用域 retry-stable 子 id：`len:parent:child` 长度前缀组合）。
+2. **image_normalize**（jcode-base）→ `internal/imaging`：四家 provider 接受
+   的 png/jpeg/gif/webp 魔数嗅探直通；BMP/ICO/TIFF 解码重编 PNG（x/image，
+   纯 Go 无 CGO；ICO 支持内嵌 PNG 与 legacy BMP 双形态）；HEIC/AVIF/SVG/
+   损坏数据给模型可读的拒绝原因；PNG/GIF/JPEG/BMP/WEBP 尺寸嗅探。
+3. **read 工具**（tool/read.rs）→ `internal/tools/read.go`：双 range 语义
+   （start_line/end_line 1-based vs offset/limit 0-based，混用与零值完整
+   错误文案）、缺失文件同目录建议（containment 相似度，最多 3 个）、扩展名
+   + 前 8KB NUL 密度二进制检测、图片按 20MB 上限走 normalize 附
+   labeled_image + 📷 标题（BMP 转 PNG 附 Converted from 说明，#1712）、
+   PDF 文本抽取（ledongthuc/pdf 纯 Go，页内 10000 截断、失败降级元数据）、
+   `%5d\t` 行号 + 2000 列截断 + continuation hint（两种 style 各自的
+   续读参数）。
+4. **write 工具** → `write.go`：父目录创建、进程内文件锁、旧内容 diff
+   摘要（`42- old`/`42+ new` 20 行上限）、file touch 事件（经
+   SetFileTouchObserver 钩子，swarm bus 随 M4+ 接线）、`/dev/null` 创建
+   unified diff、旧文件不可读时不宣称权威 diff。
+5. **edit 工具** → `edit.go`：edits 数组/单编辑速记互斥、全有或全无
+   （失败聚合 `✗ Edit N: ...` 报告 + "Edits apply in order" 提示）、
+   flexible_match_hint 三级诊断（trim/缩进/absent）、单编辑输出（紧凑 diff
+   + `%4d│ ` 上下文 ±3 行）、多编辑输出（✓ 逐条 + Diff: 摘要 30 行）、
+   file_diff attach（```diff 围栏 + metadata.diff 权威 unified diff，
+   context radius 3、`\ No newline at end of file`、控制字符文件名引用）。
+   自研 LCS 行 diff 对齐 similar::TextDiff 的 unified 渲染
+   （`@@ -37,7 +37,8 @@` hunk 合并、`,1` 省略、空 range 前移一位）。
+6. **ls 工具** → `ls.go`：默认 ignore 表 + 用户 pattern、目录优先排序、
+   隐藏文件跳过、深度 5、100 条目截断 + files/directories 计数；
+   自研 globMatch（`**`/`*`/`?`）。
+7. **config_edit_notice + change_report** → `confignotice.go`：活跃
+   config.toml 写入后追加 per-key 变更报告（dotted key 扁平化、值 JSON
+   渲染、live now/needs restart 分区、TOML 解析失败显式 WARNING）；
+   ConfigPathProvider 由 app 注入。
+
+测试统计（批次一新增）：toolcore 5 例、imaging 4 例、tools 10 例
+（上游 file_diff/edit/read/ls 用例移植 + unified diff golden 全量断言），
+全绿。
+
+文档化偏差（M3 批次一）：
+
+1. swarm bus（Bus::global FileTouch 事件）改为进程内 observer 钩子
+   （SetFileTouchObserver），事件 shape 保持一致；多进程 swarm 协调随 M4+。
+2. edit_stats 遥测记录（usage 统计）未移植——M2 已声明的 telemetry 整体
+   延后项的一部分。
+3. PDF 文本抽取用 ledongthuc/pdf 替代 pdf_extract crate：纯 Go 无 CGO 约束
+   下的最近等价物；页面分隔符（\x0c）与降级行为保持一致，抽取格式细节
+   （空格重建）可能有差异。
+4. ICO 解码自实现（x/image 无 ICO）：现代 PNG-内嵌与 legacy BMP-内嵌两形态
+   已覆盖，罕见特例（调色板边界）可能拒绝并给出可读原因。
+5. config change_report 的 liveness 分区（gateway/acp/launch_hotkeys 需
+   重启）照抄；gcode 侧配置节名如后续分叉需同步此表。
+
+## M3 进度
+
+批次一完成。剩余：批次二 agentgrep（上游独立 crate 6.3k 行，含 smart DSL/
+outline/find 模式与置信度评分）、批次三 bash PTY、批次四 webfetch/websearch
++ mcp、批次五 agent 主循环（agent.rs 1226 行 + agent/ 10.5k 行）。
