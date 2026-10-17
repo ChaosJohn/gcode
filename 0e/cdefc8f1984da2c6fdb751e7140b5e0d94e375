@@ -1,0 +1,28 @@
+docs/port/PARITY_M1.md
+  h_24be5f9e02d8b0 1-48
+go.mod
+  h_24be5f9e02d8b0 4-5
+go.sum
+  h_24be5f9e02d8b0 1-2
+internal/base/config/config.go
+  h_24be5f9e02d8b0 1-307
+internal/base/config/config_test.go
+  h_24be5f9e02d8b0 1-301
+internal/base/config/defaults.go
+  h_24be5f9e02d8b0 1-761
+internal/base/config/enums.go
+  h_24be5f9e02d8b0 1-510
+internal/base/config/testdata/jcode/default_config.toml
+  h_24be5f9e02d8b0 1-791
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ecdefc8f1984da2c6fdb751e7140b5e0d94e375",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
