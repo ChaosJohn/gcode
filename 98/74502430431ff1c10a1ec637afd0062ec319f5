@@ -1,0 +1,18 @@
+internal/agent/agent.go
+  h_24be5f9e02d8b0 36-37,215-217,224-236,379-407
+internal/agent/compaction.go
+  h_24be5f9e02d8b0 1-231
+internal/agent/compaction_test.go
+  h_24be5f9e02d8b0 1-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9874502430431ff1c10a1ec637afd0062ec319f5",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
