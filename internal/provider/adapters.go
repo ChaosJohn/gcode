@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/ChaosJohn/gcode/internal/base/config"
@@ -111,6 +112,13 @@ type OpenAIOptions struct {
 	ReasoningEffort *string
 	ServiceTier     *string
 	PromptCacheKey  *string
+	// WireAPI selects the transport wire: "responses" (default) or
+	// "chat-completions" for OpenAI-compatible endpoints without /responses.
+	WireAPI string
+	// BaseURL overrides the endpoint for the selected wire.
+	BaseURL string
+	// APIKey overrides credential resolution with a static bearer key.
+	APIKey string
 }
 
 // OpenAI is the codex provider adapter.
@@ -172,6 +180,26 @@ func (o *OpenAI) Complete(turn TurnRequest, emit func(types.StreamEvent) error) 
 	credentials, err := options.Credentials()
 	if err != nil {
 		return err
+	}
+	if strings.EqualFold(o.options.WireAPI, openai.OpenAIWireChatCompletions) {
+		apiKey := o.options.APIKey
+		if apiKey == "" {
+			apiKey = credentials.AccessToken
+		}
+		baseURL := o.options.BaseURL
+		if baseURL == "" {
+			baseURL = openai.ResolveAPIBase()
+		}
+		chatOptions := openai.ChatCompletionsOptions{
+			Model: model, BaseURL: baseURL, APIKey: apiKey,
+			System: turn.System, Messages: turn.Messages, Tools: turn.Tools,
+			Emit: emit,
+		}
+		if turn.MaxTokensOverride != nil {
+			budget := uint32(*turn.MaxTokensOverride)
+			chatOptions.MaxTokens = &budget
+		}
+		return openai.ChatCompletionsStream(chatOptions)
 	}
 	completeOptions := openai.CompleteOptions{
 		Model:           model,

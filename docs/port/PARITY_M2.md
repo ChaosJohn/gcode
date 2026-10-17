@@ -757,3 +757,41 @@ M4 收官追加批次（用户验收驱动）：把 M1–M4 的库层装配成�
    persistence 到 auth 文件随账户批次。
 4. `resume` 的跨会话 fork 未复制 source 会话的 parent 链（新会话
    status/working_dir 全新）。
+
+## M4 批次四：OpenAI-compatible provider（用户验收驱动追加）
+
+用户环境仅有 OpenAI-compatible 端点。对拍事实：上游 openai-compatible
+路线仍走 Responses 线路（jcode-provider-openai 只有 build_responses_input）；
+而常见兼容端点（DeepSeek/Moonshot/vLLM/网关）只实现
+/v1/chat/completions。为使 gcode 在该环境真实可用，新增 chat-completions
+线路作为**文档化的 gcode 侧扩展**（config `api` 显式选择，不做自动探测，
+不违背上游 Responses 主线的对拍口径）。
+
+实现：
+1. `internal/provider/openai/chatcompletions.go`：/chat/completions SSE
+   流（stream_options.include_usage）、消息转换（system 前缀、assistant
+   tool_calls、role:tool 配对去 pending）、工具 schema 映射
+   function.parameters、增量解析（delta.content → TextDelta；
+   tool_calls 起始→ToolUseStart + ToolInputDeltaFor；finish_reason/
+   流尾→ToolUseEndFor——chat 线无显式 per-call end 的补足；usage→
+   TokenUsageEvent；[DONE]→MessageEnd）、HTTP 错误带响应体上下文。
+2. adapter 分流：OpenAIOptions.WireAPI/BaseURL/APIKey；"chat-completions"
+   → ChatCompletionsStream，默认仍 Responses（上游主线不变）。
+3. appcore 命名 provider：`[providers.NAME]` 表（provider_type
+   openai-compatible/anthropic-compatible/gemini、base_url、api_key_env/
+   api_key、api、default_model），GCODE_PROVIDER=NAME 或
+   provider.default_provider 选择；环境快捷路径 OPENAI_API_KEY +
+   OPENAI_BASE_URL 经 codex 线路亦可用。doctor 列出命名 provider。
+4. 测试：假 SSE server 7 例覆盖（文本/工具调用分段增量/usage/[DONE]/
+   请求形状/消息配对/HTTP 错误）+ appcore 3 例（命名装配、键缺失错误、
+   类型分派）。全绿，全仓 gate 通过。
+
+用法（config.toml）：
+
+    [providers.deepseek]
+    provider_type = "openai-compatible"
+    base_url = "https://api.deepseek.com/v1"
+    api_key_env = "DEEPSEEK_KEY"
+    default_model = "deepseek-chat"
+
+    然后 GCODE_PROVIDER=deepseek gcode run "…"（或写 provider.default_provider）。

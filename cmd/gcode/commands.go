@@ -173,6 +173,15 @@ func runDoctor(_ []string, stdout, stderr io.Writer) int {
 	check("tools", fmt.Sprintf("%d registered: %s", len(registry.Names()),
 		strings.Join(registry.Names(), ", ")), len(registry.Names()) > 0)
 
+	if cfg != nil && len(cfg.Providers) > 0 {
+		names := make([]string, 0, len(cfg.Providers))
+		for name := range cfg.Providers {
+			names = append(names, name)
+		}
+		fmt.Fprintf(stdout, "  • named providers: %s (select with GCODE_PROVIDER=<name>)\n",
+			strings.Join(names, ", "))
+	}
+
 	sessions, listErr := sessionstoreList(home)
 	check("sessions", detailOr(listErr, fmt.Sprintf("%d stored in %s/sessions",
 		len(sessions), home)), listErr == nil)

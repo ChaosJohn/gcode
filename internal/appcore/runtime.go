@@ -75,6 +75,11 @@ func BuildProvider(cfg *config.Config, sessionID string) (provider.Provider, err
 	if env := strings.TrimSpace(os.Getenv("GCODE_MODEL")); env != "" {
 		model = env
 	}
+	// A named [providers.<selector>] table wins when present (jcode
+	// NamedProviderConfig): base_url + api_key(_env) + optional wire api.
+	if named, ok := cfg.Providers[selector]; ok {
+		return buildNamedProvider(selector, named, model)
+	}
 
 	switch selector {
 	case "claude", "anthropic":
@@ -85,6 +90,53 @@ func BuildProvider(cfg *config.Config, sessionID string) (provider.Provider, err
 		return provider.NewGemini(model, provider.GeminiOptions{Client: gemini.NewClient()}), nil
 	default:
 		return nil, fmt.Errorf("unknown provider %q (supported: claude, codex, gemini)", selector)
+	}
+}
+
+// buildNamedProvider assembles a provider from a [providers.NAME] table.
+// Supported: openai-compatible (base_url + api_key_env/api_key, wire
+// "responses"|"chat-completions" — default chat-completions for
+// openai-compatible), plus passthrough types claude/codex/gemini.
+func buildNamedProvider(name string, named config.NamedProviderConfig, model string) (provider.Provider, error) {
+	apiKey := ""
+	if named.APIKey != nil {
+		apiKey = strings.TrimSpace(*named.APIKey)
+	}
+	if named.APIKeyEnv != nil {
+		if env := strings.TrimSpace(os.Getenv(*named.APIKeyEnv)); env != "" {
+			apiKey = env
+		}
+	}
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	}
+	wire := "chat-completions"
+	if named.API != nil && strings.TrimSpace(*named.API) != "" {
+		wire = strings.ToLower(strings.TrimSpace(*named.API))
+	}
+	if named.DefaultModel != nil && model == "" {
+		model = *named.DefaultModel
+	}
+	switch strings.ToLower(string(named.ProviderType)) {
+	case "", "openai-compatible":
+		if named.BaseURL == "" {
+			return nil, fmt.Errorf("provider %q: base_url is required for openai-compatible", name)
+		}
+		if apiKey == "" {
+			return nil, fmt.Errorf("provider %q: no api key (set api_key, api_key_env, or OPENAI_API_KEY)", name)
+		}
+		return provider.NewOpenAI(model, provider.OpenAIOptions{
+			WireAPI: wire, BaseURL: named.BaseURL, APIKey: apiKey,
+			Credentials: func() (*openai.CodexCredentials, error) {
+				return &openai.CodexCredentials{AccessToken: apiKey}, nil
+			},
+		}), nil
+	case "anthropic-compatible":
+		return buildClaude(model, "named-"+name)
+	case "gemini":
+		return provider.NewGemini(model, provider.GeminiOptions{Client: gemini.NewClient()}), nil
+	default:
+		return nil, fmt.Errorf("provider %q: unsupported provider_type %q", name, named.ProviderType)
 	}
 }
 
