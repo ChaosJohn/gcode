@@ -381,3 +381,63 @@ secret-scanning unblock 页面放行）。下一步：M3 agent loop + 核心工�
 批次一完成。剩余：批次二 agentgrep（上游独立 crate 6.3k 行，含 smart DSL/
 outline/find 模式与置信度评分）、批次三 bash PTY、批次四 webfetch/websearch
 + mcp、批次五 agent 主循环（agent.rs 1226 行 + agent/ 10.5k 行）。
+
+## M3 批次二：agentgrep 引擎与工具
+
+移植范围（agentgrep crate v0.1.7，6.3k 行 Rust）→ `internal/agentgrep` +
+`internal/tools/agentgrep.go`：
+
+1. **structure.rs** → structure.go：per-language 行扫描符号检测（rust
+   fn/struct/enum/trait/impl 含 pub(crate)/async/generics 剥离、ts-js
+   function/class/interface/箭头函数、python def/class、markdown 标题、
+   generic SECTION 大写段）、行区间 finalize（下一 item 起点或 EOF）、
+   detect_language 扩展名表、infer_role 路径角色（test/docs/ui/auth/
+   provider/config/handler/implementation/generic）。
+2. **search.rs** → grep.go + rg.go：rg 快路径（`--no-config`、fixed-strings/
+   regex `-e` 传参防 `-` 前缀解析、`--follow`、`--no-messages`、hidden/
+   no-ignore、`-g` glob、自定义 `--type-add/-t` 实现 glob∩type 交集语义、
+   exit 0/1/2 语义、NUL 分隔 paths-only、`path:line:col:text` 冒号路径
+   前向重切）+ 原生 walker 兜底（默认 ignore、gitignore/rgignore 基础规则、
+   隐藏跳过、符号链接 follow、字节序确定性排序）；结构分组（file-scope
+   组前置、符号组按文件序、≥12 匹配时 max 8 组/2 other、≥24 匹配跳过结构
+   抽取走 dense file-scope）；matcher（literal contains / regex）。
+3. **find.rs** → find.go：tokenize（字母数字+下划线）、path/symbol/text
+   证据评分（full query 120 / token 25 / symbol 8×4 cap / text 4 / role 20、
+   role boost +20、docs -25、test -15、无证据即弃）、top 8 symbols、
+   score 降序 + path tie-break、max_files 截断。
+4. **outline.rs** → RunOutline + RenderOutlineOutput。
+5. **render.rs** → render.go：grep 渲染（query/matches 头、symbols 行、
+   `- kind label @ a-b`、`- @ line text`、paths_only、max_regions 截断 +
+   "more matches omitted (max_regions=N)"、非代码文件 3 行 cap）、240 字符
+   match 行压缩（match 前 80 字符上下文 + `[truncated: N chars before/after]`）、
+   find/outline 渲染 shape。
+6. **workspace.rs** → 收敛进 grep.go（walker/read_text_file NUL 检测/
+   normalize_file_type 别名）。
+7. **工具包装**（tool/agentgrep.rs + args.rs）：schema（mode enum
+   grep/find/outline/trace、query/file/terms/regex/path/glob/type/max_files/
+   max_regions/paths_only，无内部字段泄漏）、mode 默认 grep、
+   resolved_search_scope（file→root+basename glob、目录→root）、match-all
+   glob 剥离、find 未定向空 query 拒绝、outline file/query/first-term 与
+   file-valued path 容错、exact-file 过滤（grep/find 各自的 result 过滤 +
+   计数重算）、错误统一 `agentgrep {mode} failed after {ms}ms: {detail}`、
+   无 session cwd 且无绝对路径拒绝。
+
+测试：agentgrep 包 11 例（上游 structure/find/render/glob/walker 断言 +
+rg/native 双路径对拍、`-` 前缀 query、非法 regex hint）+ tools 2 例
+（mode 矩阵、cwd 守卫）。全绿，全仓 gate 通过。
+
+文档化偏差（M3 批次二）：
+
+1. trace/smart 模式（smart_dsl.rs + smart_engine.rs，1.3k 行）未移植：
+   terms 解析报错后指引用 grep/find/outline，schema 枚举保留 trace 以便
+   后续批次接入；跟批（M3 收尾或 M4 前）补齐。
+2. rg 缺失时原生 walker 是兜底而非逐字节等价：ignore 规则子集
+   （无 `**` 目录重锚定、无字符类、无嵌套 .gitignore 优先级 beyond 目录
+   前缀），rg 路径语义为准。
+3. 非 UTF-8 路径的 disambiguate（`#b=` + hex token 流）简化为
+   lossy + 整体 hex 后缀，行为差异仅影响非法字节文件名（罕见）。
+4. 前台 5s 预算转后台任务（AGENTGREP_FOREGROUND_BUDGET → background
+   registry）未移植——后台任务基础设施随 agent 主循环（批次五）落地；
+   当前同步执行，5s 预算常量已导出备接。
+5. 多线程并行文件处理（thread::scope chunk）以单 goroutine 顺序处理
+   替代（rg 快路径下吞吐已足够；原生路径处理大仓时慢但语义一致）。
