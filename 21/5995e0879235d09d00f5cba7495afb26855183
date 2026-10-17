@@ -1,0 +1,48 @@
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 126-212,215-216
+internal/provider/anthropic/format.go
+  h_24be5f9e02d8b0 7,11-21,32
+internal/provider/openai/citations_test.go
+  h_24be5f9e02d8b0 1-103
+internal/provider/openai/oauth.go
+  h_24be5f9e02d8b0 1-116
+internal/provider/openai/provider.go
+  h_24be5f9e02d8b0 1-545
+internal/provider/openai/provider_test.go
+  h_24be5f9e02d8b0 1-442
+internal/provider/openai/request.go
+  h_24be5f9e02d8b0 1-577
+internal/provider/openai/request_test.go
+  h_24be5f9e02d8b0 1-321
+internal/provider/openai/schema.go
+  h_24be5f9e02d8b0 1-436
+internal/provider/openai/schema_test.go
+  h_24be5f9e02d8b0 1-176
+internal/provider/openai/stream.go
+  h_24be5f9e02d8b0 1-1324
+internal/provider/openai/stream_test.go
+  h_24be5f9e02d8b0 1-634
+internal/provider/transporterr/transporterr.go
+  h_24be5f9e02d8b0 1-69
+internal/schema/dialect/dialect.go
+  h_24be5f9e02d8b0 1-512
+internal/schema/dialect/dialect_test.go
+  h_24be5f9e02d8b0 1-293
+internal/schema/dialect/keyword.go
+  h_24be5f9e02d8b0 1-74
+internal/schema/dialect/quirks.go
+  h_24be5f9e02d8b0 1-157
+internal/schema/dialect/registry.go
+  h_24be5f9e02d8b0 1-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "215995e0879235d09d00f5cba7495afb26855183",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
