@@ -1,0 +1,26 @@
+cmd/gcode/commands.go
+  h_24be5f9e02d8b0 176-184
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 760-797
+internal/appcore/runtime.go
+  h_24be5f9e02d8b0 78-82,96-142
+internal/appcore/runtime_test.go
+  h_24be5f9e02d8b0 1-86
+internal/provider/adapters.go
+  h_24be5f9e02d8b0 5,115-121,184-203
+internal/provider/openai/chatcompletions.go
+  h_24be5f9e02d8b0 1-257
+internal/provider/openai/chatcompletions_test.go
+  h_24be5f9e02d8b0 1-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fa11ee36e90484611f847f56877f7cd5c93abdf",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
