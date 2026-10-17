@@ -33,6 +33,8 @@ type ToolHooks struct {
 	// OnEvent observes every stream event (CLI/TUI rendering hooks in here;
 	// errors from the callback abort the stream).
 	OnEvent func(event types.StreamEvent) error
+	// OnStatus reports non-stream state changes (compaction, retries).
+	OnStatus func(text string)
 }
 
 // Agent is the turn loop (ported subset of agent.rs): conversation history,
@@ -210,13 +212,27 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 			return nil
 		})
 		if err != nil {
-			// Ported try_auto_compact_after_context_limit shape: retry a
-			// bounded number of times on context-limit errors.
+			// Ported try_auto_compact_after_context_limit: on a context-limit
+			// error, summarize the older turns and retry with the compacted
+			// history instead of failing the run.
 			if isContextLimitError(err.Error()) {
 				contextLimitRetries++
 				if contextLimitRetries > MaxContextLimitRetries {
 					return "", fmt.Errorf("Context limit exceeded after %d compaction retries",
 						MaxContextLimitRetries)
+				}
+				outcome, compactErr := a.autoCompact()
+				if compactErr != nil {
+					return "", fmt.Errorf("context limit exceeded and auto-compaction failed: %w", compactErr)
+				}
+				if outcome == nil {
+					// Nothing to drop (history too short): plain retry.
+					continue
+				}
+				a.Messages = append([]types.Message{outcome.SummaryUserMessage}, outcome.Kept...)
+				if a.Hooks.OnStatus != nil {
+					a.Hooks.OnStatus(fmt.Sprintf(
+						"[compaction] summarized %d messages; retrying", outcome.Dropped))
 				}
 				continue
 			}
@@ -358,6 +374,35 @@ func firstLine(text string) string {
 		text = string(runes[:200]) + "..."
 	}
 	return text
+}
+
+// autoCompact summarizes everything except the recent-turn suffix. Returns
+// nil when the history is too short to compact.
+func (a *Agent) autoCompact() (*CompactOutcome, error) {
+	cutoff := chooseCompactionCutoff(a.Messages)
+	if cutoff == 0 {
+		return nil, nil
+	}
+	return BuildCompactionOutcome(a.Messages, cutoff, func(prompt string) (string, error) {
+		var summary strings.Builder
+		request := provider.TurnRequest{System: "You are a precise summarizer.",
+			Messages: []types.Message{{Role: types.RoleUser,
+				Content: []types.ContentBlock{types.TextBlock(prompt)}}}}
+		err := a.Provider.Complete(request, func(event types.StreamEvent) error {
+			if delta, ok := event.(types.TextDelta); ok {
+				summary.WriteString(delta.Text)
+			}
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+		text := strings.TrimSpace(summary.String())
+		if text == "" {
+			return "", fmt.Errorf("summarizer returned empty output")
+		}
+		return text, nil
+	})
 }
 
 // isContextLimitError matches the upstream context-limit error classifier.
