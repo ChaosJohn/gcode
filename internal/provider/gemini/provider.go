@@ -163,6 +163,15 @@ func (c *Client) cachedState(key string) *RuntimeState {
 	return nil
 }
 
+// InvalidateState drops the cached Code Assist state so the next turn
+// re-runs the handshake.
+func (c *Client) InvalidateState() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.state = nil
+	c.stateKey = ""
+}
+
 func (c *Client) setFetchedModels(models []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
