@@ -581,10 +581,12 @@ const (
 
 func defaultWebSearchConfig() WebSearchConfig {
 	fallback := WebSearchBing
+	maxUses := uint64(DefaultNativeWebSearchMaxUses)
 	return WebSearchConfig{
 		Engine: WebSearchDuckDuckGo, FallbackEngines: []WebSearchEngine{fallback},
 		BingAPIKeyEnv: "JCODE_BING_API_KEY", BingMarket: "en-US",
 		SearxngURLEnv: "JCODE_SEARXNG_URL", PreferNative: true,
+		NativeMaxUses:              &maxUses,
 		NativeAnthropicToolVersion: DefaultAnthropicWebSearchTool,
 	}
 }

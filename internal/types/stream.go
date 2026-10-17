@@ -107,6 +107,7 @@ const (
 	PhaseSendingRequest  ConnectionPhase = "sending request"
 	PhaseWaitingResponse ConnectionPhase = "waiting for response"
 	PhaseStreaming       ConnectionPhase = "streaming"
+	PhaseRetrying        ConnectionPhase = "retrying"
 )
 
 // ConnectionPhaseEvent reports a phase update; Retrying carries attempt/max.

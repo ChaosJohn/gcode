@@ -5,6 +5,7 @@
 package anthropic
 
 import (
+	"runtime"
 	"strings"
 )
 
@@ -365,11 +366,26 @@ func MapToolNameFromOAuth(name string) string {
 	}
 }
 
-// StainlessOS/Arch mirror the client metadata Anthropic sees.
+// StainlessOS mirrors the client metadata Anthropic sees, per runtime OS.
 func StainlessOS() string {
-	return "MacOS" // resolved per-runtime in the transport; darwin default
+	switch runtime.GOOS {
+	case "linux":
+		return "Linux"
+	case "windows":
+		return "Windows"
+	default:
+		return "MacOS"
+	}
 }
 
+// StainlessArch mirrors the client metadata per runtime architecture.
 func StainlessArch() string {
-	return "arm64"
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x64"
+	case "386":
+		return "x86"
+	default:
+		return "arm64"
+	}
 }
