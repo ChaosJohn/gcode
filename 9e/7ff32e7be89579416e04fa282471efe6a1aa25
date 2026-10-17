@@ -1,0 +1,48 @@
+go.mod
+  h_24be5f9e02d8b0 3,6-10
+go.sum
+  h_24be5f9e02d8b0 1-2,5-6
+internal/imaging/imaging.go
+  h_24be5f9e02d8b0 1-288
+internal/imaging/imaging_test.go
+  h_24be5f9e02d8b0 1-96
+internal/imaging/util.go
+  h_24be5f9e02d8b0 1-9
+internal/pdf/pdf.go
+  h_24be5f9e02d8b0 1-52
+internal/toolcore/toolcore.go
+  h_24be5f9e02d8b0 1-281
+internal/toolcore/toolcore_test.go
+  h_24be5f9e02d8b0 1-181
+internal/tools/confignotice.go
+  h_24be5f9e02d8b0 1-220
+internal/tools/diff.go
+  h_24be5f9e02d8b0 1-289
+internal/tools/edit.go
+  h_24be5f9e02d8b0 1-339
+internal/tools/ls.go
+  h_24be5f9e02d8b0 1-200
+internal/tools/metadata_test_helper.go
+  h_24be5f9e02d8b0 1-22
+internal/tools/read.go
+  h_24be5f9e02d8b0 1-383
+internal/tools/tools.go
+  h_24be5f9e02d8b0 1-91
+internal/tools/tools_test.go
+  h_24be5f9e02d8b0 1-375
+internal/tools/util.go
+  h_24be5f9e02d8b0 1-7
+internal/tools/write.go
+  h_24be5f9e02d8b0 1-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9e7ff32e7be89579416e04fa282471efe6a1aa25",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
