@@ -1,0 +1,24 @@
+internal/mcp/mcp.go
+  h_24be5f9e02d8b0 1-411
+internal/mcp/mcp_test.go
+  h_24be5f9e02d8b0 1-140
+internal/tools/mcp.go
+  h_24be5f9e02d8b0 1-419
+internal/tools/webfetch.go
+  h_24be5f9e02d8b0 1-274
+internal/tools/webmcp_test.go
+  h_24be5f9e02d8b0 1-265
+internal/tools/websearch.go
+  h_24be5f9e02d8b0 1-454
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e9d8da2fa6f2c004449af3a7b1eaa57fa9dd2c8",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
