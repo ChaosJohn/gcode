@@ -1,0 +1,32 @@
+internal/agentgrep/agentgrep_test.go
+  h_24be5f9e02d8b0 1-311
+internal/agentgrep/find.go
+  h_24be5f9e02d8b0 1-271
+internal/agentgrep/glob.go
+  h_24be5f9e02d8b0 1-142
+internal/agentgrep/grep.go
+  h_24be5f9e02d8b0 1-532
+internal/agentgrep/render.go
+  h_24be5f9e02d8b0 1-225
+internal/agentgrep/rg.go
+  h_24be5f9e02d8b0 1-278
+internal/agentgrep/structure.go
+  h_24be5f9e02d8b0 1-435
+internal/agentgrep/util.go
+  h_24be5f9e02d8b0 1-7
+internal/tools/agentgrep.go
+  h_24be5f9e02d8b0 1-357
+internal/tools/tools_test.go
+  h_24be5f9e02d8b0 376-489
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b477f170da0ce894f3631dc6dc22970eb22b0cae",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
