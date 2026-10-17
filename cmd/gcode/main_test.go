@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,11 +53,10 @@ func TestUnknownCommand(t *testing.T) {
 // milestone, so scripts can distinguish "not ported yet" from misuse.
 func TestPlannedCommandsReportMilestone(t *testing.T) {
 	cases := map[string]string{
-		"run":          "M3",
-		"doctor":       "M2",
-		"serve":        "M4",
-		"resume":       "M4",
-		"import-jcode": "M4",
+		"run":    "M3",
+		"doctor": "M2",
+		"serve":  "M4",
+		"resume": "M4",
 	}
 	for cmd, milestone := range cases {
 		code, _, errOut := runForTest(t, cmd)
@@ -65,6 +66,34 @@ func TestPlannedCommandsReportMilestone(t *testing.T) {
 		if !strings.Contains(errOut, milestone) {
 			t.Errorf("run(%q) stderr = %q, want mention of milestone %s", cmd, errOut, milestone)
 		}
+	}
+}
+
+// import-jcode is live as of M4 batch 2: no jcode home is a usage error,
+// and a real import succeeds end to end.
+func TestImportJcodeCommand(t *testing.T) {
+	t.Setenv("GCODE_HOME", t.TempDir())
+	code, out, _ := runForTest(t, "import-jcode")
+	if code != exitUsage {
+		t.Fatalf("missing home exit = %d, want %d", code, exitUsage)
+	}
+	source := t.TempDir()
+	sessions := filepath.Join(source, "sessions")
+	if err := os.MkdirAll(sessions, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sessions, "x1.json"),
+		[]byte(`{"id":"x1","status":"active","messages":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ = runForTest(t, "import-jcode", source)
+	if code != exitOK || !strings.Contains(out, "Imported 1 session(s)") {
+		t.Fatalf("import: code=%d out=%q", code, out)
+	}
+	// Re-import skips the already-present id.
+	code, out, _ = runForTest(t, "import-jcode", source)
+	if code != exitOK || !strings.Contains(out, "skipped") {
+		t.Fatalf("re-import: code=%d out=%q", code, out)
 	}
 }
 
