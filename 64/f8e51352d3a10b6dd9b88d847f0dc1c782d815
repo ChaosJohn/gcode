@@ -1,0 +1,38 @@
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 68-125,128-130
+internal/base/config/defaults.go
+  h_24be5f9e02d8b0 584,589
+internal/provider/anthropic/caps.go
+  h_24be5f9e02d8b0 8,369,371-378,381,383-390
+internal/provider/anthropic/errclass.go
+  h_24be5f9e02d8b0 1-133
+internal/provider/anthropic/models.go
+  h_24be5f9e02d8b0 1-194
+internal/provider/anthropic/nativewebsearch.go
+  h_24be5f9e02d8b0 1-107
+internal/provider/anthropic/oauth.go
+  h_24be5f9e02d8b0 1-312
+internal/provider/anthropic/provider.go
+  h_24be5f9e02d8b0 1-118
+internal/provider/anthropic/provider_test.go
+  h_24be5f9e02d8b0 1-133
+internal/provider/anthropic/retry.go
+  h_24be5f9e02d8b0 1-289
+internal/provider/anthropic/transport.go
+  h_24be5f9e02d8b0 1-464
+internal/provider/anthropic/transport_test.go
+  h_24be5f9e02d8b0 1-500
+internal/types/stream.go
+  h_24be5f9e02d8b0 110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64f8e51352d3a10b6dd9b88d847f0dc1c782d815",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
