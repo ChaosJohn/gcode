@@ -1,0 +1,28 @@
+cmd/gcode/commands.go
+  h_24be5f9e02d8b0 1-241
+cmd/gcode/commands_test.go
+  h_24be5f9e02d8b0 1-64
+cmd/gcode/main.go
+  h_24be5f9e02d8b0 44-45,48,68-74
+cmd/gcode/main_test.go
+  h_24be5f9e02d8b0 56
+internal/agent/agent.go
+  h_24be5f9e02d8b0 33-35,157-161
+internal/agent/persistence.go
+  h_24be5f9e02d8b0 49-63
+internal/appcore/runtime.go
+  h_24be5f9e02d8b0 1-246
+internal/sessionstore/sessionstore.go
+  h_24be5f9e02d8b0 159-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c35296c37a7317a58754b387a583731398d10e1",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
