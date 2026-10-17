@@ -140,3 +140,13 @@ func matchGlobSegments(pattern, rel string) bool {
 	}
 	return compiled.matchPath(rel)
 }
+
+// MatchGlobPath is the exported glob check used by other tools (replace
+// file filters): compile the pattern and match a root-relative path.
+func MatchGlobPath(pattern, relPath string) (bool, error) {
+	compiled, err := CompileGlob(pattern)
+	if err != nil {
+		return false, err
+	}
+	return compiled.matchPath(relPath), nil
+}

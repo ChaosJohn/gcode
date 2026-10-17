@@ -795,3 +795,43 @@ M4 收官追加批次（用户验收驱动）：把 M1–M4 的库层装配成�
     default_model = "deepseek-chat"
 
     然后 GCODE_PROVIDER=deepseek gcode run "…"（或写 provider.default_provider）。
+
+## M4 批次五：replace / apply_patch / batch 工具（真实使用驱动）
+
+用户 OpenAI-compatible 端点验证通过后，按"日常使用最先撞到的缺口"回填
+M4 批次三记录的偏差 #2。对拍事实：上游无独立 glob/grep/find 工具（搜索
+面就是 agentgrep），缺失的是 replace / apply_patch / batch 三个高频工具。
+
+移植（crates/jcode-app-core/src/tool/，逐算法对拍）：
+
+1. **replace**（replace.rs 406 行）：字面量/regex 双模式（regex=true 时
+   Rust regex 语义 → Go regexp，$1/${name} 展开、字面量模式不展开）、
+   目录遍历（含隐藏文件、跳过 .git、相对 glob 过滤、单文件直通）、
+   expected_count 全有或全无、dry_run 报告 UnifiedDiff 不写盘、
+   "Replaced N match(es) in M file(s)" + per-file 计数 + diff 输出、
+   零匹配干净报错。
+2. **apply_patch**（apply_patch.rs 828 行）：`*** Begin Patch` 解析器
+   （Add/Delete/Update File、`*** Move to:` 改名、@@ 上下文、' '/'-'/'+'、
+   `*** End of File` 锚点、无 @@ 首块）→ compute_replacements
+   （seek_sequence 前向 + EOF 锚定从尾搜、精确优先再 trim-end 容忍、
+   空老行=插入、尾部空行宽容）→ apply_replacements → 单文件原子；
+   冲突 hunk（同文件不同操作）预检拒绝、整批失败不落盘。
+3. **batch**（batch.rs 386 行）：子调用并行执行、subcall id
+   `batch-<n>-<tool>`、结果按原始顺序渲染、每子调用 50000/n 截断
+   预算、`--- [n] tool ---` 分节 + "Completed: X succeeded, Y failed"、
+   失败子调用错误内联。agent 循环的 batch nudge 自动识别新工具。
+4. 注册面 12 → 15 工具；agentgrep 导出 MatchGlobPath 供 replace
+   过滤复用。
+
+测试：14 例（replace 字面量多文件/计数门/regex 捕获组/dry_run/零匹配；
+apply_patch 三类 hunk/无 @@ 首块/EOF 追加/原子失败/找不到上下文；
+batch 并行/混合成败/空批次）。全绿，全仓 gate 通过。
+
+文档化偏差（M4 批次五）：
+
+1. replace 的 ignore 语义：上游用 ignore::WalkBuilder（.gitignore/
+   .ignore 链）；Go 侧为 .git 跳过 + glob 过滤（.gitignore 尚未接
+   agentgrep 的 ignore 链——后续随 agentgrep 对拍批次补齐）。
+2. apply_patch 的 file_lock/edit_stats/Bus 发布（上游 TUI 事件面）
+   未移植（TUI 批次范围）。
+3. batch 子调用的 images 聚合未移植（无图像工具面）。

@@ -228,9 +228,13 @@ func BuildRegistry() *agent.Registry {
 		tools.NewMcpSearchTool(),
 		tools.NewMcpCallTool(),
 		tools.NewMcpTool(),
+		tools.NewReplaceTool(),
+		tools.NewApplyPatchTool(),
+		tools.NewBatchTool(),
 	} {
 		registry.Register(tool)
 	}
+	tools.SetBatchRegistry(registry)
 	return registry
 }
 

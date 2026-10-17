@@ -18,7 +18,7 @@ func TestDoctorReportsEnvironment(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("doctor exit=%d out=%s err=%s", code, out, errOut)
 	}
-	if !strings.Contains(out, "12 registered") || !strings.Contains(out, "claude credentials") {
+	if !strings.Contains(out, "15 registered") || !strings.Contains(out, "claude credentials") {
 		t.Fatalf("doctor output: %s", out)
 	}
 }
