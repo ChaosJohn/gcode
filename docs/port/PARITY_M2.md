@@ -835,3 +835,41 @@ batch 并行/混合成败/空批次）。全绿，全仓 gate 通过。
 2. apply_patch 的 file_lock/edit_stats/Bus 发布（上游 TUI 事件面）
    未移植（TUI 批次范围）。
 3. batch 子调用的 images 聚合未移植（无图像工具面）。
+
+## M4 批次六：上下文自动压缩（compaction）接线
+
+真实使用第二个高频缺口：长会话撞上下文上限直接失败。移植
+jcode-compaction-core（1371 行中的核心纯函数）+ base CompactionManager
+的响应式应用路径。
+
+移植内容（internal/agent/compaction.go）：
+
+1. 常量与提示词：CHARS_PER_TOKEN=4、RECENT_TURNS_TO_KEEP=10、
+   MIN_TURNS_TO_KEEP=2、结果截断 500 字符、SUMMARY_PROMPT 逐字、
+   `## Previous Conversation Summary` 摘要块包装。
+2. build_compaction_conversation_text：User/Assistant 平面转录、
+   [Tool: name - input]、[Result: content]（500 截断）、先验摘要
+   `## Previous Summary` 标题（链式压缩）。
+3. build_compaction_prompt：200k 字符预算 + 截断边界（UTF-8 安全）。
+4. safe_compaction_cutoff：向后生长保留尾缀直至每个 tool_result 的
+   tool_use 同在尾缀内；找不到则不压缩（0）。
+5. chooseCompactionCutoff：保留最后 10 个 user turn（不足则最少 2、
+   再少不压缩）→ safe cutoff 修复配对。
+6. agent 接线：isContextLimitError 命中后不再只重试——autoCompact()
+   用同一 provider 一次性总结（summarizer 系统提示），消息列表替换为
+   [摘要 user 消息] + 保留尾缀，重试计入 MaxContextLimitRetries=5；
+   Hooks.OnStatus（新）向 CLI 流输出
+   `[compaction] summarized N messages; retrying`。
+7. 测试：转录构建器（截断长度/工具一行/先验摘要）、cutoff 配对修复、
+   端到端 scripted 上下文超限 → 摘要 → 续跑成功（3 次 provider 调用：
+   失败轮/总结/压缩后轮）。全绿，全仓 gate 通过。
+
+文档化偏差（M4 批次六）：
+
+1. 后台压缩未移植（上游 CompactionManager 后台任务 + 80% 响应式
+   触发 + proactive EWMA/semantic 模式）——headless 顺序流无后台位，
+   压缩在上下文超限错误时内联执行；80% 预警触发随 TUI 批次。
+2. supports_compaction 门未接（chat-completions 线路一律可压缩——
+   摘要调用与普通轮同线路，无 OpenAI native compaction 分支）。
+3. EMERGENCY 降级路径（payload too large 剥图、image 拒绝恢复）未
+   移植（无图像工具面）。
