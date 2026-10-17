@@ -712,3 +712,48 @@ M4 完成：会话持久化（snapshot+journal，jcode 盘面格式同构）、�
 import-jcode CLI。M0–M4 核心可用版全部落地。运行面：`gcode import-jcode`
 可用；`run`/`resume`/`serve`/`doctor`/TUI 按 PORT_PLAN 尚属后续里程碑
 （M5+），不在本 goal 的 M0–M4 范围内。
+
+## M4 批次三：run / resume / doctor CLI 接线（端到端打通）
+
+M4 收官追加批次（用户验收驱动）：把 M1–M4 的库层装配成可运行的二进制。
+
+移植 → `internal/appcore/runtime.go` + `cmd/gcode/commands.go`：
+
+1. **appcore 装配层**：LoadConfig（config.toml over defaults，缺文件=
+   defaults）、BuildProvider（GCODE_PROVIDER/GCODE_MODEL 环境覆盖 +
+   config provider.default_provider/default_model；claude：ANTHROPIC_API_KEY
+   直连 → OAuth 链（native Claude Code 凭据 → env → jcode store，过期
+   RefreshClaudeTokens 刷新）；codex：CODEX_API_KEY → ~/.codex/auth.json
+   OAuth；gemini：Code Assist 首调握手）、BuildRegistry（12 工具）、
+   Assemble（agent + persistence 一体）、RunHeadless。
+2. **CLI**：`run <prompt>`（流式 TextDelta 透传 + 工具 `[name] (ok|error)
+   summary` 行 + 会话 id 尾注）；`resume [session] [prompt]`（无参列
+   最新 10 个会话；有参经 snapshot+journal 全量重放恢复、prompt 继续
+   并 fork 新会话 id、源会话保持不变）；`doctor`（home/config/凭据/
+   12 工具清单/会话计数，静态检查无网络，问题项 ✗ + exit 1）。
+   agent 增加 Hooks.OnEvent 流式观察钩子；sessionstore.Store 暴露
+   Path()/Home()。
+3. **真实环境验证**（本机，非测试桩）：
+   - `doctor`：全检查项正确输出（本机：config 有、15 会话、无 Claude
+     OAuth → ✗ 如实报告）。
+   - `resume` 无参：列出真实 15 个 jcode 导入会话（408/258/183 消息）；
+     `resume <real>` 恢复 438 条消息 = 408 snapshot + 30 journal 重放
+     —— journal 重放链路在真实 jcode 数据上验证通过；未知 id 报错
+     exit 2。
+   - `run`（codex 凭据存在）：凭据加载 → 请求构造 → HTTP 发送全链路
+     打通，终点为网络层超时（api.openai.com 本机直连不可达、系统无
+     代理）；api.anthropic.com 可达（403 无凭据）——设置
+     ANTHROPIC_API_KEY 或在有出口网络的机器上即可完成真实模型响应
+     验证。
+4. 测试：CLI 3 例（doctor 全检查、run 用法/无凭据错误、resume 列表/
+   恢复/未知 id 三态）；规划表 serve 为唯一剩余占位命令。
+
+文档化偏差（M4 批次三）：
+
+1. CLI 系统提示为紧凑版（jcode 完整 prompt bundle 随 TUI 批次）。
+2. 工具面 12 个：glob/grep/find/apply_patch/replace/batch/task 等上游
+   其余工具未注册（agentgrep 覆盖搜索面；其余随后续批次）。
+3. OAuth 刷新后的凭据不回写存储（内存内有效至进程退出）——上游
+   persistence 到 auth 文件随账户批次。
+4. `resume` 的跨会话 fork 未复制 source 会话的 parent 链（新会话
+   status/working_dir 全新）。
