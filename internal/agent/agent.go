@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ChaosJohn/gcode/internal/provider"
+	"github.com/ChaosJohn/gcode/internal/sessionstore"
 	"github.com/ChaosJohn/gcode/internal/toolcore"
 	"github.com/ChaosJohn/gcode/internal/types"
 )
@@ -50,6 +51,8 @@ type Agent struct {
 	lockedTools   []types.ToolDefinition
 	// LastUsage is the final usage report of the last turn.
 	LastUsage types.StoredTokenUsage
+	// persistStore is the session persistence sink when wired (M4).
+	persistStore *sessionstore.Store
 }
 
 // NewAgent wires the loop.
@@ -235,6 +238,9 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 				continue
 			}
 			a.AddMessage(assistant.Role, assistant.Content)
+			if a.persistStore != nil {
+				_ = a.PersistTranscript()
+			}
 			finalText = textContent.String()
 			return finalText, nil
 		}
@@ -258,6 +264,10 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 		}
 		if sequentialSingleToolRounds >= sequentialToolRoundsBeforeBatchNudge {
 			batchNudgePending = true
+		}
+		// Persist after every tool round so a crash keeps completed work.
+		if a.persistStore != nil {
+			_ = a.PersistTranscript()
 		}
 	}
 }

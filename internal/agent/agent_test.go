@@ -5,10 +5,12 @@ package agent
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ChaosJohn/gcode/internal/provider"
+	"github.com/ChaosJohn/gcode/internal/sessionstore"
 	"github.com/ChaosJohn/gcode/internal/toolcore"
 	"github.com/ChaosJohn/gcode/internal/types"
 )
@@ -265,5 +267,42 @@ func TestRegistryAlias(t *testing.T) {
 	}
 	if _, ok := registry.Get("missing"); ok {
 		t.Fatalf("phantom tool")
+	}
+}
+
+// M4 wiring: the transcript persists through the sessionstore model and
+// reloads (snapshot + journal) with the full conversation.
+func TestPersistenceAcrossReload(t *testing.T) {
+	input := json.RawMessage(`{"text":"hi"}`)
+	agent, _ := newScriptedAgent([]scriptedResponse{
+		{text: "checking", toolCalls: []types.ToolCall{
+			{ID: "t1", Name: "echo", Input: input}}},
+		{text: "finished"},
+	})
+	store := sessionstore.NewStore(sessionstore.Session{ID: "persist-1"}, t.TempDir())
+	agent.WirePersistence(store)
+	if _, err := agent.RunOnce("hello"); err != nil {
+		t.Fatal(err)
+	}
+	// Reload from disk through a fresh store.
+	reloaded, err := sessionstore.Open(t.TempDir(), "persist-1")
+	if err == nil || reloaded != nil {
+		t.Fatalf("wrong home should not resolve")
+	}
+	home := filepath.Dir(filepath.Dir(store.Path()))
+	reloaded, err = sessionstore.Open(home, "persist-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// user, assistant(tool_use), user(tool_result), assistant(final).
+	if len(reloaded.Session.Messages) != 4 {
+		t.Fatalf("persisted messages: %d", len(reloaded.Session.Messages))
+	}
+	if reloaded.Session.Messages[0].Role != types.RoleUser {
+		t.Fatalf("first role: %s", reloaded.Session.Messages[0].Role)
+	}
+	last := reloaded.Session.Messages[3]
+	if last.Content[0].Text == nil || *last.Content[0].Text != "finished" {
+		t.Fatalf("final text: %+v", last.Content[0])
 	}
 }

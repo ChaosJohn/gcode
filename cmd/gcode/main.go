@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/ChaosJohn/gcode/internal/sessionstore"
 	"github.com/ChaosJohn/gcode/internal/version"
 )
 
@@ -42,7 +44,7 @@ var commands = []command{
 	{name: "run", synopsis: "run <prompt>", summary: "headless single-shot agent run", milestone: "M3"},
 	{name: "resume", synopsis: "resume [session]", summary: "resume a stored session", milestone: "M4"},
 	{name: "serve", synopsis: "serve", summary: "harness API server mode", milestone: "M4"},
-	{name: "import-jcode", synopsis: "import-jcode", summary: "import an existing ~/.jcode home", milestone: "M4"},
+	{name: "import-jcode", synopsis: "import-jcode [jcode-home]", summary: "import an existing ~/.jcode home", milestone: ""},
 	{name: "doctor", synopsis: "doctor", summary: "provider and environment diagnostics", milestone: "M2"},
 	{name: "help", synopsis: "help", summary: "show this help", milestone: ""},
 }
@@ -61,7 +63,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "help", "--help", "-h":
 		usage(stdout)
 		return exitOK
-	case "run", "resume", "serve", "import-jcode", "doctor":
+	case "import-jcode":
+		return runImportJcode(rest, stdout, stderr)
+	case "run", "resume", "serve", "doctor":
 		c := lookup(cmd)
 		fmt.Fprintf(stderr, "gcode %s: not implemented yet — planned for %s (docs/port/PORT_PLAN.md)\n", cmd, c.milestone)
 		if len(rest) > 0 && cmd == "run" {
@@ -73,6 +77,34 @@ func run(args []string, stdout, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
+}
+
+// runImportJcode copies jcode sessions into the gcode home (M4 interop).
+func runImportJcode(args []string, stdout, stderr io.Writer) int {
+	source := os.Getenv("JCODE_HOME")
+	if source == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(stderr, "gcode import-jcode: %v\n", err)
+			return exitInternal
+		}
+		source = filepath.Join(home, ".jcode")
+	}
+	if len(args) > 0 {
+		source = args[0]
+	}
+	if info, err := os.Stat(source); err != nil || !info.IsDir() {
+		fmt.Fprintf(stderr, "gcode import-jcode: no jcode home at %s\n", source)
+		return exitUsage
+	}
+	imported, skipped, err := sessionstore.ImportJcode(source, sessionstore.HomeDir())
+	if err != nil {
+		fmt.Fprintf(stderr, "gcode import-jcode: %v\n", err)
+		return exitInternal
+	}
+	fmt.Fprintf(stdout, "Imported %d session(s) from %s (%d already present, skipped).\n",
+		imported, source, skipped)
+	return exitOK
 }
 
 func lookup(name string) command {

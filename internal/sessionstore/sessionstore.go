@@ -153,6 +153,9 @@ func NewStore(session Session, home string) *Store {
 	return &Store{Session: session, path: path, journal: JournalPathFromSnapshot(path)}
 }
 
+// Path exposes the snapshot path (test + CLI convenience).
+func (s *Store) Path() string { return s.path }
+
 // Save persists the session (ports save_inner): checkpoint (full snapshot +
 // journal truncation) when the transcript shrank or metadata changed;
 // otherwise delta entries append to the journal.
