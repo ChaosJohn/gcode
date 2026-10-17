@@ -1,0 +1,14 @@
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 213-284,287-289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7d57b5fa8221caea7d11130fa7fbdd6fa25c9737",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
