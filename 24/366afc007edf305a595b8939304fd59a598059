@@ -1,0 +1,14 @@
+cmd/gcode/main_test.go
+  h_24be5f9e02d8b0 76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "24366afc007edf305a595b8939304fd59a598059",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
