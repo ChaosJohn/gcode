@@ -1,0 +1,26 @@
+cmd/gcode/commands.go
+  h_24be5f9e02d8b0 8,11-12,15,17,21,134-222,271-279
+cmd/gcode/main.go
+  h_24be5f9e02d8b0 49,75-76
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 876-918
+internal/mcp/mcp.go
+  h_24be5f9e02d8b0 2-4,36,150-152,161,165-167,228-232,243-245,271-273,345-349
+internal/mcp/oauth.go
+  h_24be5f9e02d8b0 1-367
+internal/mcp/remote.go
+  h_24be5f9e02d8b0 1-579
+internal/mcp/remote_test.go
+  h_24be5f9e02d8b0 1-379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d84a166125db9208764bd299d8b3c43a4a4e0b9b",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
