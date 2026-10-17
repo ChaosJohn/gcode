@@ -615,3 +615,50 @@ websearch/mcp/bash + destructive gate）、agent 主循环、会话外设
 （config/lock/pdf/imaging/embedding）。TUI 行为等价口径、外围集成按
 计划不做。后续批次：M4 SQLite 会话存储 + jcode 互操作、MCP 远程传输/
 OAuth、tool_markup_recovery、agent memory/compaction 接线。
+
+## M4 批次一：会话持久化（snapshot + journal）与 jcode 互操作
+
+关键对拍澄清：目标原文写"M4 会话 SQLite 存储"，但上游 v0.98.1 实际
+不使用 SQLite——jcode-base/src/session/persistence.rs（926 行）+
+journal.rs + storage_paths.rs + jcode-storage 的持久化模型是**每会话
+一个 JSON snapshot（<id>.json）+ 追加式 JSONL journal（<id>.journal.jsonl）**
+（journal meta 里 metadata_requires_snapshot 判定 + checkpoint 折叠）。
+按对拍原则跟随上游盘面格式（这同时使 jcode 数据互操作天然成立），
+故未引入 SQLite；modernc.org/sqlite 不再需要（若后续上游引入再议）。
+
+移植 → `internal/sessionstore`：
+
+1. **盘面布局**（storage_paths.rs 逐字）：<home>/sessions/<id>.json、
+   journal = 文件名主干 + ".journal.jsonl"（非扩展名替换）；gcode home
+   解析 GCODE_HOME → ~/.gcode。
+2. **save_inner 主路径**：checkpoint（snapshot 原子写 tmp+rename + journal
+   删除）触发于首次保存/向量收缩/meta 变更；否则 JournalEntry
+   （meta + append_messages snake_case，jcode 字段兼容）追加 journal。
+3. **load_from_path**：snapshot 读入（read_json_with_recovery：主文件
+   损坏 → .backup 回退）→ snapshot 内 message id 去重 → journal 重放
+   （JournalReplayDedupe：重放已在 snapshot 的 id 计为 stale 丢弃）→
+   glued 行 salvage（`{"meta":` 边界切分，撕裂写恢复）→ 损坏行计 corrupt
+   → schedule_checkpoint_after_corrupt_journal（下次 Save 重写干净
+   snapshot 并删 journal）。
+4. **ListSessions**：sessions 目录 *.json（排除 .backup），updated_at
+   新→旧。
+5. **ImportJcode**：$JCODE_HOME（或 ~/.jcode）→ gcode home 的字节级
+   复制（格式同构），已存在 id 跳过，journal 随行。
+
+测试 8 例（roundtrip、收缩 checkpoint 删 journal、stale 重放去重、
+glued salvage、损坏 journal 恢复、.backup 回退、列表排序、import 双跑）。
+全绿，全仓 gate 通过，已推送。
+
+文档化偏差（M4 批次一）：
+
+1. SessionJournalMeta 覆盖上游字段子集（parent/title/custom_title/
+   system_prompt/model/provider/status）；env_snapshots/memory_injections/
+   replay_events 的 append 载体已留 RawMessage 位，字段随 memory/compaction
+   批次接。
+2. SAVES_IN_FLIGHT 守卫、migration lease（跨机迁移拒写）、transcript
+   stripped 拒 checkpoint、snapshot shrink 字节护栏、decay_old_tool_images、
+   load_telemetry 计时未移植（前两者随并发/TUI 批次，后者为观测面）。
+3. journal meta 的 metadata_requires_snapshot 全字段比较简化为 checkpoint
+   触发条件（首次/收缩/损坏）——model/provider/status 变更走 journal
+   apply 也正确回放，只是下次 checkpoint 才固化为 snapshot，与上游
+   行为等价（上游同样允许 meta 随 journal 存活至下次 checkpoint）。
