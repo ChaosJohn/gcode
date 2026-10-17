@@ -1,0 +1,36 @@
+internal/types/helpers_test.go
+  h_24be5f9e02d8b0 1-192
+internal/types/jsonutil.go
+  h_24be5f9e02d8b0 1-67
+internal/types/jtime.go
+  h_24be5f9e02d8b0 1-67
+internal/types/message.go
+  h_24be5f9e02d8b0 1-484
+internal/types/message_helpers.go
+  h_24be5f9e02d8b0 1-280
+internal/types/message_test.go
+  h_24be5f9e02d8b0 1-329
+internal/types/session.go
+  h_24be5f9e02d8b0 1-670
+internal/types/session_test.go
+  h_24be5f9e02d8b0 1-341
+internal/types/stream.go
+  h_24be5f9e02d8b0 1-194
+internal/types/task.go
+  h_24be5f9e02d8b0 1-467
+internal/types/testdata/jcode/session_sample.json
+  h_24be5f9e02d8b0 1
+internal/types/tool.go
+  h_24be5f9e02d8b0 1-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "398e8f8e914f601ab7491bade61d18f4b3f1f574",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
