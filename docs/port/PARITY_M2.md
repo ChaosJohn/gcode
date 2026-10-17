@@ -210,7 +210,80 @@ stream 25 例、citations 5 例、provider 12 例，全绿。
    初始响应超时（initial response timeout）并入 http.Client 超时与错误包装，
    语义等价（断连包装 "connection closed before response headers" 进瞬态分类）。
 
+## 批次四：Gemini provider（Code Assist + Developer API）
+
+移植范围：
+
+1. **请求成形**（jcode-provider-gemini lib.rs）→
+   `internal/provider/gemini/types.go`：build_contents（role user/model 映射、
+   tool_use→functionCall 带 id、tool_result→functionResponse 反查工具名、
+   错误结果包 {"error": ...}、图片 inlineData、非 object 参数归一化 {}）、
+   **Gemini-3 thoughtSignature 重放策略**（own→carried-forward 全历史语义，
+   本地合成/导入历史不再 400 #339）、DowngradeToolCallsToText 恢复策略
+   （调用与结果降级为 `[previous tool call/result]` 文本，Antigravity runtime
+   语义）、build_system_instruction_with_tool_guard（有工具时附加
+   MALFORMED_FUNCTION_CALL 防护块）、build_tools + gemini_compatible_schema
+   （经共享 dialect.Gemini：additionalProperties/propertyNames/uniqueItems 剥除、
+   const→enum、oneOf→anyOf、悬挂 required 剪除）。
+2. **认证** → `auth.go`：Developer API key 优先（GEMINI_API_KEY→GOOGLE_API_KEY
+   →gemini.env，force_oauth 可钉死 OAuth 路线，JCODE→GCODE 改名）、
+   Google OAuth（Gemini CLI desktop client 681255809395-…，refresh grant
+   x-www-form-urlencoded，60s 提前刷新窗口，单飞锁）、凭据存
+   ~/.gcode/gemini_oauth.json，可回退读取官方 CLI 的
+   ~/.gemini/oauth_creds.json。
+3. **Code Assist 运行时**（runtime lib.rs）→ `provider.go`/`models.go`：
+   loadCodeAssist→onboardUser LRO（5s 轮询、free-tier 不带 project 元数据、
+   standard-tier VPC-SC 降级）、generateContent 信封（model/project/
+   user_prompt_id UUID/request.contents+systemInstruction+tools+toolConfig
+   AUTO+session_id）、Developer API 直发内层体（无信封、x-goog-api-key 头、
+   models/{model}:generateContent）、模型发现（ListModels 剥 models/ 前缀 +
+   loadCodeAssist 全树收集 + 目录缓存 gemini_models_cache.json）、
+   HTTP 层（GeminiCLI-tui/0.57.0 UA + x-goog-api-client gl-node/26.4.0 配额
+   身份、send_with_retry 两次瞬态传输重试 250ms、generateContent/loadCodeAssist
+   的 5xx/429 重试阶梯 MAX=5 base 1500ms 带 Retry-After 提示、daily/billing
+   429 不重试、onboardUser 永不自动重放）、模型 404 回退阶梯
+   （FALLBACK_MODELS 逐个试、成功即钉住并 OnModelSwitch）、
+   schema 拒答恢复（dialect.RecoverFromError 学习 + 单次重试）。
+4. **complete() 事件映射**：非流式响应一次性映射 →
+   ConnectionType(https)/Authenticating/SendingRequest/WaitingResponse →
+   SessionId → Streaming → TokenUsage → 逐 part（text→TextDelta、
+   functionCall→ToolUseStart/InputDelta/ToolUseEnd/ToolUseSignature）→
+   MessageEnd（finish_reason 小写）。promptFeedback 拦截（"Gemini blocked the
+   prompt ({reason})"）、SAFETY/BLOCKLIST/PROHIBITED_CONTENT/SPII/RECITATION
+   无内容即报错、finish_message 截断 300。
+5. **dialect 补齐**（jcode-schema-dialect rejection.rs + recover_from_error）→
+   `internal/schema/dialect/rejection.go`：三类真实拒答 shape（#754 Unknown
+   name…Cannot find field、#543/#687 OpenAI 格式与关键字、#655 悬挂 required、
+   #713 类型缺失、#495 combiner），escape 去引号、多 fieldViolations 去重收集、
+   load-bearing 拒绝不可吸收、学习一次重试一次不循环。顺带修复 quirks 存储
+   的测试路径分支未拼文件名的 bug（此前每次读空存储）。
+
+测试统计（批次四新增）：gemini 19 例、dialect rejection 10 例，全绿；
+含 httptest 端到端（Developer API 事件序列 golden、Code Assist 信封 +
+bearer、模型 404 回退钉住、thought_signature 400 直通、schema 拒答学习重试、
+prompt 拦截、ListModels 发现 + 目录缓存）。
+
+文档化偏差（批次四）：
+
+1. Antigravity runtime（独立 provider、antigravity 桥方言 quirks 预置、
+   DowngradeToolCallsToText 的完整 wiring）延后——Antigravity 是 M2 范围外的
+   第二个 Gemini 形态 provider（计划批准的范围为 Anthropic/OpenAI/Gemini）；
+   降级策略本身已随 types.go 就位。
+2. login 浏览器流（PKCE + 本地回调端口 + codeassist.google.com/authcode 手动
+   粘贴）未移植——gcode 登录编排属 CLI 侧（M3 接线时补），refresh 链路已完整。
+3. gemini_cli_command / has_gemini_cli（检测本机 Gemini CLI 作登录辅助）未
+   移植；CLI 凭据导入已支持。
+4. usage 探针 / catalog_refresh 定时刷新 / available_models_display 与 TUI
+   相关部分延后（同 Anthropic 批次二偏差 2/5）。
+5. oauth_creds.json 的 expiry_date 解析按 epoch 毫秒数处理；CLI 写 ISO8601
+   的情形按无法解析→立即视为过期→走 refresh 降级（行为安全）。
+6. 环境变量 JCODE_GEMINI_MODEL→GCODE_GEMINI_MODEL、
+   JCODE_GEMINI_FORCE_OAUTH→GCODE_GEMINI_FORCE_OAUTH、
+   JCODE_GEMINI_USER_AGENT→GCODE_GEMINI_USER_AGENT、
+   JCODE_GEMINI_PROJECT→GCODE_GEMINI_PROJECT（D4 写侧改名）。
+
 ## 状态
 
-M2 批次三完成（schema-dialect + OpenAI Responses provider + Codex OAuth +
-测试全绿）。剩余：Gemini provider、OpenAI/Gemini OAuth 完整化（批次四）。
+M2 批次四完成（Gemini provider + Code Assist/Developer API 双路由 +
+schema-dialect 恢复 + 测试全绿）。三大 provider（Anthropic/OpenAI/Gemini）
+均已落地；M2 剩余收尾：provider 门面接线（供 M3 agent loop 选择 provider）。
