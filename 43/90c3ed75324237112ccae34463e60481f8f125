@@ -1,0 +1,32 @@
+internal/provider/gemini/auth.go
+  h_24be5f9e02d8b0 1-360
+internal/provider/gemini/config.go
+  h_24be5f9e02d8b0 1-34
+internal/provider/gemini/gemini_test.go
+  h_24be5f9e02d8b0 1-722
+internal/provider/gemini/models.go
+  h_24be5f9e02d8b0 1-140
+internal/provider/gemini/provider.go
+  h_24be5f9e02d8b0 1-753
+internal/provider/gemini/types.go
+  h_24be5f9e02d8b0 1-573
+internal/provider/gemini/util.go
+  h_24be5f9e02d8b0 1-16
+internal/schema/dialect/quirks.go
+  h_24be5f9e02d8b0 38
+internal/schema/dialect/rejection.go
+  h_24be5f9e02d8b0 1-287
+internal/schema/dialect/rejection_test.go
+  h_24be5f9e02d8b0 1-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4390c3ed75324237112ccae34463e60481f8f125",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
