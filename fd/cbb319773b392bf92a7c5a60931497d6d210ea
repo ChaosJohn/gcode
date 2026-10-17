@@ -1,0 +1,18 @@
+internal/agent/agent.go
+  h_24be5f9e02d8b0 1-358
+internal/agent/agent_test.go
+  h_24be5f9e02d8b0 1-269
+internal/agent/registry.go
+  h_24be5f9e02d8b0 1-126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fdcbb319773b392bf92a7c5a60931497d6d210ea",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
