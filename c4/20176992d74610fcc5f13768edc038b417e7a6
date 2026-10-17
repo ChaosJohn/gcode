@@ -1,0 +1,18 @@
+internal/sessionstore/.tmp
+  h_24be5f9e02d8b0 1
+internal/sessionstore/sessionstore.go
+  h_24be5f9e02d8b0 1-433
+internal/sessionstore/sessionstore_test.go
+  h_24be5f9e02d8b0 1-219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c420176992d74610fcc5f13768edc038b417e7a6",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
