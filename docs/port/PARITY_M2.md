@@ -441,3 +441,62 @@ rg/native 双路径对拍、`-` 前缀 query、非法 regex hint）+ tools 2 例
    当前同步执行，5s 预算常量已导出备接。
 5. 多线程并行文件处理（thread::scope chunk）以单 goroutine 顺序处理
    替代（rg 快路径下吞吐已足够；原生路径处理大仓时慢但语义一致）。
+
+## M3 批次三：destructive gate 与 bash 工具
+
+移植范围（jcode-command-risk crate 1.5k 行 + tool/bash.rs 1577 行 +
+bash_destructive_gate.rs）→ `internal/cmdrisk` + `internal/tools/bash.go`：
+
+1. **tokenize.rs** → tokenize.go：引号解析（单引号原样、双引号转义集、
+   反斜杠）、`>`/`>>`/`>|` 截断重定向目标标记、`&&`/`||`/`;`/`|`/括号
+   分段与 receives_pipe 传播、heredoc body 剥离（#922：per-context 引号
+   状态扫描，`"$(cat <<'EOF'` 内层 heredoc 仍剥离、单引号内 `<<` 惰性、
+   `<<<` here-string 跳过）、`$()`/反引号 embedded_substitutions 递归评估
+   （#1753）。
+2. **paths.rs** → paths.go：词法 expand（`~`/`$HOME`/`${HOME}`/
+   `$JCODE_SCRATCH_DIR` 完整前缀，`$HOME_BACKUP` 不误扩、未解析变量不
+   归一化）、`..` 归一化（非符号链接感知）、绝对/递归保护路径四档表
+   （系统精确/系统递归、凭据 store 递归、home 子目录精确——gcode 增加
+   `.gcode`）、glob 父目录边界判定（bare `~/*` 即灾难级、cwd/临时目录内
+   glob 降为 Low）、/dev 设备节点拒绝。
+3. **lib.rs** → risk.go：destructive/wrapper/shell/conditional 命令表、
+   wrapper 剥离（各自吃值 flag 表、`command -v` 白名单、`env -S` 拒绝、
+   裸数字操作数）、shell 内联脚本递归、find 专属评估（`-delete`、
+   `-fprintf` 输出目标、`-exec` payload 只读白名单 cat/readlink/简单 sed
+   打印脚本、`{}` 根替换）、管道供源与无目标升级、`dd of=` 键值拆解。
+4. **gate.rs** → gate.go：Catastrophic 永拒（不可 justification 解锁）、
+   Confirm 反思提示（对照用户实际请求的检查清单）、justification 实质性
+   判定（≥25 字符 + 纯肯定词拒绝表）——盲重试原样失败。
+5. **bash 工具**：schema（command 必填、timeout 毫秒描述、run_in_background/
+   notify/wake/stall_wake_seconds/justification）、destructive gate 先于
+   后台分发、repo dev_cargo.sh cargo 包装（无脚本时惰性）、file_edit_hint
+   （sed -i/perl -i/python|node 写文件三类原地改写提示）、前台执行
+   （`bash -c` + GCODE/JCODE_SESSION_ID + 磁盘后备 scratch 目录
+   （GCODE_HOME/scratch，#1718 等价）+ setpgid 进程组、超时 SIGKILL 全组 +
+   timeout_message 毫秒提示）、输出 30000 字节 UTF-8 边界截断 +
+   `Exit code: N` + 空输出文案、stdout/stderr 合流保序、后台执行
+   （进程组分离、输出/状态文件、任务注册表 `bg-{pid}-{n}` + JCODE_PROGRESS
+   指导文案）。
+
+上游澄清：bash 工具前台路径是管道而非 PTY（PTY 仅 TUI 交互 shell 使用），
+stdin 探测依赖 /proc（Linux）且需 agent 主循环的 stdin 请求通道——批次五
+接线；本批次 StdinRequest 通道保持 nil。
+
+测试：cmdrisk 13 例（上游 paths/gate/assess 全关键断言：#604 命令集、
+home 全拼写、../.. 逃逸、链式、heredoc 数据、sudo/sh -c 剥离、find -delete、
+dd 设备节点、盲重试、justification 实质性）+ bash 工具 7 例（hint 正反集、
+UTF-8 截断、scratch 接线、stderr/exit code、超时杀树、gate 集成、后台
+注册表）。全绿，全仓 gate 通过，已推送。
+
+文档化偏差（M3 批次三）：
+
+1. 超时不晋升后台（upstream timeout → background registry adopt）：后台
+   任务注册表本批次已落地最小版（spawn/输出文件/状态文件/查询），但
+   `bg` 工具与 agent 唤醒集成随批次五；前台超时当前杀进程组并报 124。
+2. reload-persistable 前台路径（graceful shutdown 时 detached 续跑）未
+   移植——依赖 TUI 重载生命周期，随 agent 主循环补。
+3. stdin 探测（/proc 等待循环 + StdinInputRequest 服务）随批次五。
+4. 进度解析（JCODE_PROGRESS/CHECKPOINT marker + heuristic 42%/3/10/相位
+   行）已随 BACKGROUND_PROGRESS_GUIDANCE 文案入库，解析器接线后台任务
+   状态流随批次五。
+5. Windows cmd.exe 路径不移植（目标环境 darwin/linux）。
