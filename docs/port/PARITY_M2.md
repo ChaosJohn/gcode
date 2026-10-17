@@ -662,3 +662,53 @@ glued salvage、损坏 journal 恢复、.backup 回退、列表排序、import �
    触发条件（首次/收缩/损坏）——model/provider/status 变更走 journal
    apply 也正确回放，只是下次 checkpoint 才固化为 snapshot，与上游
    行为等价（上游同样允许 meta 随 journal 存活至下次 checkpoint）。
+
+## M4 批次二：agent 持久化接线、session_search、import-jcode CLI（M4 收官）
+
+移植 → `internal/agent/persistence.go`、`internal/tools/sessionsearch.go`、
+`cmd/gcode`：
+
+1. **agent↔sessionstore**：ToStoredMessage（role+index+内容 SHA-256 前
+   16 hex 稳定 id——重复保存同前缀在 journal 重放下保持去重安全）、
+   WirePersistence(store)、PersistTranscript（working_dir/model/provider
+   回填，status 缺省 active）；run_turn 在每个工具轮后与最终分支保存
+   （崩溃保留已完成工作，对拍上游 per-save 语义的常量级近似）。
+2. **session_search**（tool/session_search.rs + jcode-session-types
+   渲染器）：QueryProfile（小写分词 + 停用词表剔除；raw 空与纯停用词
+   两种错误文案分立——"Query cannot be empty." vs "too generic after
+   removing common stop words"）、limit 10/50、max_per_session 1/20（
+   会话多样性默认 1）、context_before/after 0–5、working_dir 过滤、
+   role 过滤、include_current/tools/system 开关（默认排除当前会话与
+   工具噪音）、扫描上限 10000、命中结构（Source/Session ID/Title/
+   Working dir/Model/Updated/Match #n (role) + Snippet + 上下文行）、
+   "## Found N results" 头部与 defaults/Scanned 元信息行、无结果引导
+   文案；扫描经 sessionstore.Open（snapshot+journal 全量重放）。
+3. **import-jcode CLI**：`gcode import-jcode [jcode-home]`（JCODE_HOME →
+   ~/.jcode 默认源，GCODE_HOME 目标），import/skip 计数与退出码
+   （无源目录 = usage error 2）；M0 规划表 import-jcode 标记为已实现。
+
+测试：agent 持久化跨重载 1 例（4 消息全链路落盘重放）、session_search
+3 例（命中/渲染、停用词门、目录/role/多样性/空查询/无结果）、CLI
+import-jcode 2 例（缺源 usage、导入+跳过重导）。全绿，全仓 gate 通过，
+已推送。
+
+文档化偏差（M4 批次二）：
+
+1. session_search 索引面（session_search_index.rs 654 行：索引文件、
+   spawn_recent_index_warmup 预热、IndexFileSpec 增量、外部源
+   conversation_search）以目录直扫代替——万级会话目录的索引优化未移植；
+   external/conversation_search 随外围集成批次（规划不做）。
+2. after/before/provider/model/source/saved/debug/canary 过滤器与
+   exhaustive 扫描开关未移植（schemas 已留 limit/role/context 面）。
+3. 渲染器 short_name/外部 source 标注/外部会话计数行简化（单源 jcode）。
+4. agent 持久化 ids 为内容派生（上游 message id 由 id 模块生成后持久），
+   语义等价（重放去重安全）但 id 字面值不同——jcode 互操作按结构不按
+   字面 id。
+
+## M4 里程碑小结
+
+M4 完成：会话持久化（snapshot+journal，jcode 盘面格式同构）、恢复
+（backup/损坏 journal/撕裂行）、agent 接线（turn 级保存）、session_search、
+import-jcode CLI。M0–M4 核心可用版全部落地。运行面：`gcode import-jcode`
+可用；`run`/`resume`/`serve`/`doctor`/TUI 按 PORT_PLAN 尚属后续里程碑
+（M5+），不在本 goal 的 M0–M4 范围内。
