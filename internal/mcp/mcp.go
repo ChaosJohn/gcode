@@ -1,6 +1,7 @@
 // Package mcp ports jcode-base/src/mcp: the MCP client core (JSON-RPC 2.0
-// over stdio), dispatch naming, and the searchable tool catalog. Remote
-// HTTP/SSE transports and OAuth flows are follow-up work (see PARITY_M3).
+// over stdio and streamable HTTP with legacy SSE fallback), dispatch naming,
+// and the searchable tool catalog. OAuth token storage follows RFC 9728/8414
+// discovery (mcp/oauth.go).
 package mcp
 
 import (
@@ -32,6 +33,7 @@ type ServerConfig struct {
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // dispatchName is the model-facing name for an MCP tool: mcp__server__tool
@@ -145,6 +147,9 @@ type Client struct {
 	nextID   int64
 	Tools    []ToolDef
 	Protocol string
+	// remote is set for URL-configured servers (streamable HTTP transport
+	// with legacy SSE fallback); nil means stdio.
+	remote *remoteState
 }
 
 // NewClient prepares (but does not start) a stdio connection.
@@ -153,9 +158,13 @@ func NewClient(name string, config ServerConfig) *Client {
 }
 
 // Connect spawns the server process and performs the initialize handshake.
+// URL-configured servers use the remote HTTP transport instead.
 func (c *Client) Connect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.config.URL != "" {
+		return c.connectRemoteLocked()
+	}
 	if c.config.Command == "" {
 		return fmt.Errorf("mcp server %s has no command", c.name)
 	}
@@ -216,6 +225,11 @@ func (c *Client) Connect() error {
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.remote != nil {
+		c.remote.close()
+		c.remote = nil
+		return nil
+	}
 	if c.cmd == nil || c.cmd.Process == nil {
 		return nil
 	}
@@ -226,6 +240,9 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) call(method string, params any) (json.RawMessage, error) {
+	if c.remote != nil {
+		return c.remote.call(method, params)
+	}
 	c.nextID++
 	request := jsonRPCRequest{JSONRPC: "2.0", ID: c.nextID, Method: method, Params: params}
 	if err := c.stdin.Encode(request); err != nil {
@@ -251,6 +268,9 @@ func (c *Client) call(method string, params any) (json.RawMessage, error) {
 }
 
 func (c *Client) notify(method string, params any) error {
+	if c.remote != nil {
+		return c.remote.notify(method, params)
+	}
 	return c.stdin.Encode(map[string]any{
 		"jsonrpc": "2.0", "method": method, "params": params,
 	})
@@ -321,6 +341,11 @@ func loadConfiguredServers() map[string]ServerConfig {
 			var args []string
 			if err := json.Unmarshal([]byte(value), &args); err == nil {
 				entry.Args = args
+			}
+		case "headers":
+			var headers map[string]string
+			if err := json.Unmarshal([]byte(value), &headers); err == nil {
+				entry.Headers = headers
 			}
 		}
 		out[name] = entry

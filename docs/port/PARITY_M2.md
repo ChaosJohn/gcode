@@ -873,3 +873,46 @@ jcode-compaction-core（1371 行中的核心纯函数）+ base CompactionManager
    摘要调用与普通轮同线路，无 OpenAI native compaction 分支）。
 3. EMERGENCY 降级路径（payload too large 剥图、image 拒绝恢复）未
    移植（无图像工具面）。
+
+## M4 批次七：MCP 远程传输 + OAuth（remote.rs/oauth.rs 移植）
+
+用户验收继续 backlog 的第一项。上游 remote.rs（1057 行）+ oauth.rs
+（1167 行）→ internal/mcp/remote.go + oauth.go（约 900 行）。
+
+移植内容：
+
+1. **streamable HTTP 线路**（remote.go）：POST Accept:
+   application/json, text/event-stream；响应 JSON 或 SSE 双解析
+   （增量 SSE 解析器）；`mcp-session-id` 响应头会话钉扎（0x21-0x7e
+   校验）；`mcp-protocol-version` 协商标头回传；404+已有会话 →
+   "session expired"（清会话，下次 Connect 重新 initialize）；202/204
+   带请求 id → 干净报错；非 2xx → 状态 + 512 字节 body 摘要；
+   **重定向一律拒绝**（静态头可能携带凭据，不跟随服务器选定目标）。
+2. **legacy HTTP+SSE 回退**：initialize 400/404/405 → GET text/event-stream
+   流，`event: endpoint` 命名 POST 端点，请求 POST、响应经后台读循环
+   按 id 路由到等待方，流断开 → 全部等待方失败。
+3. **静态头注入**：host/content-length/transfer-encoding/session/
+   protocol 头拒收（transport 控制）；静态 Authorization 存在则跳过
+   OAuth；config `headers = '{"K":"V"}'` 解析。
+4. **OAuth**（oauth.go）：~/.gcode/mcp-auth.json 令牌存储（0600）；
+   RFC 9728 protected-resource 元数据 → RFC 8414 authorization-server
+   发现（openid-configuration 回退）；过期前 60s 自动 refresh_token
+   换新并回写；`gcode mcp-login <url>`：RFC 7591 动态客户端注册 +
+   PKCE S256 + 回环监听授权码交换（浏览器步骤打印 URL 手动打开）。
+5. CLI 新命令 mcp-login；doctor 列出已存 OAuth 令牌。
+
+测试（假 server 全链路）：streamable JSON/SSE 双响应、会话头钉扎
+（initialize 无陈旧会话、后续请求携带）、静态头透传 + 受控头拒收、
+重定向拒绝、404 会话过期、legacy SSE 回退（endpoint 事件 + 流式
+应答 + 客户端断开收尾）、OAuth 发现链（9728→8414 跳转）+ refresh
+换新回写 + 有效令牌短路 + 0600 权限。全绿，全仓 gate 通过。
+
+文档化偏差（M4 批次七）：
+
+1. 上游 remote.rs 的并发出站队列/Notify 停机/cancellation 轮询简化
+   为客户端互斥串行（与 stdio Client 同锁语义；行为等价于顺序调用）。
+2. oauth.rs 的 provider 路由白名单、401 自动 recover_from_unauthorized
+   重试（刷新后原请求重放）简化为 401 干净报错指路 mcp-login；自动
+   重放随账户池批次。
+3. resource 参数（RFC 8707 resource indicator）未随 refresh/authorize
+   请求发送（上游亦未发）。

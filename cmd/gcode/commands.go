@@ -5,14 +5,20 @@ package main
 // file only assembles and renders.
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/ChaosJohn/gcode/internal/agent"
 	"github.com/ChaosJohn/gcode/internal/appcore"
+	"github.com/ChaosJohn/gcode/internal/mcp"
 	"github.com/ChaosJohn/gcode/internal/types"
 )
 
@@ -125,6 +131,95 @@ func runResume(args []string, stdout, stderr io.Writer) int {
 
 // runDoctor implements `gcode doctor`: static environment diagnostics, no
 // network calls.
+// runMcpLogin performs the interactive MCP OAuth flow: dynamic client
+// registration, a loopback redirect listener, and PKCE code exchange.
+func runMcpLogin(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "usage: gcode mcp-login <server-url>")
+		return exitUsage
+	}
+	serverURL := strings.TrimSpace(args[0])
+	metadata, err := mcp.DiscoverAuthorizationServer(serverURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "gcode mcp-login: %v\n", err)
+		return exitInternal
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		fmt.Fprintf(stderr, "gcode mcp-login: loopback listener: %v\n", err)
+		return exitInternal
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+	clientID, err := mcp.RegisterClient(metadata, redirectURI)
+	if err != nil {
+		fmt.Fprintf(stderr, "gcode mcp-login: %v\n", err)
+		return exitInternal
+	}
+	verifier, err := mcp.PKCEVerifier()
+	if err != nil {
+		return exitInternal
+	}
+	state := fmt.Sprintf("%d", time.Now().UnixNano())
+	authURL, err := mcp.BuildAuthorizationURL(metadata, clientID, redirectURI, state, verifier)
+	if err != nil {
+		return exitInternal
+	}
+	fmt.Fprintf(stdout, "Open this URL to authorize MCP access:\n%s\n\nWaiting for the redirect...\n", authURL)
+
+	type loginCallback struct {
+		code    string
+		state   string
+		errText string
+	}
+	callbacks := make(chan loginCallback, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		item := loginCallback{code: query.Get("code"), state: query.Get("state"),
+			errText: query.Get("error")}
+		fmt.Fprintln(w, "Authorization received. You can close this tab.")
+		select {
+		case callbacks <- item:
+		default:
+		}
+	})
+	server := &http.Server{Handler: mux}
+	go func() { _ = server.Serve(listener) }()
+	select {
+	case item := <-callbacks:
+		if item.errText != "" {
+			fmt.Fprintf(stderr, "gcode mcp-login: authorization failed: %s\n", item.errText)
+			return exitInternal
+		}
+		if item.state != state {
+			fmt.Fprintln(stderr, "gcode mcp-login: state mismatch")
+			return exitInternal
+		}
+		token, err := mcp.ExchangeAuthorizationCode(serverURL, metadata, clientID,
+			redirectURI, item.code, verifier)
+		if err != nil {
+			fmt.Fprintf(stderr, "gcode mcp-login: %v\n", err)
+			return exitInternal
+		}
+		fmt.Fprintf(stdout, "Authorized %s (token expires %s)\n", token.ServerURL,
+			token.ExpiresAt.Format(time.RFC3339))
+		_ = shutdownServer(server, 500*time.Millisecond)
+		return exitOK
+	case <-time.After(5 * time.Minute):
+		fmt.Fprintln(stderr, "gcode mcp-login: timed out waiting for authorization")
+		_ = shutdownServer(server, 500*time.Millisecond)
+		return exitInternal
+	}
+}
+
+func shutdownServer(server *http.Server, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return server.Shutdown(ctx)
+}
+
 func runDoctor(_ []string, stdout, stderr io.Writer) int {
 	failed := false
 	check := func(name, detail string, ok bool) {
@@ -173,6 +268,15 @@ func runDoctor(_ []string, stdout, stderr io.Writer) int {
 	check("tools", fmt.Sprintf("%d registered: %s", len(registry.Names()),
 		strings.Join(registry.Names(), ", ")), len(registry.Names()) > 0)
 
+	if servers := mcp.LoadAuthStore(); len(servers) > 0 {
+		names := make([]string, 0, len(servers))
+		for url := range servers {
+			names = append(names, url)
+		}
+		sort.Strings(names)
+		fmt.Fprintf(stdout, "  • mcp oauth tokens: %d stored (%s)\n",
+			len(names), strings.Join(names, ", "))
+	}
 	if cfg != nil && len(cfg.Providers) > 0 {
 		names := make([]string, 0, len(cfg.Providers))
 		for name := range cfg.Providers {
