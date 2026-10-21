@@ -56,6 +56,9 @@ type Agent struct {
 	lockedTools   []types.ToolDefinition
 	// LastUsage is the final usage report of the last turn.
 	LastUsage types.StoredTokenUsage
+	// markupNudges counts re-issue reminders for unparseable markup.
+	markupNudges    int
+	recoveryCounter int
 	// persistStore is the session persistence sink when wired (M4).
 	persistStore *sessionstore.Store
 }
@@ -261,12 +264,53 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 				}
 				continue
 			}
-			a.AddMessage(assistant.Role, assistant.Content)
-			if a.persistStore != nil {
-				_ = a.PersistTranscript()
+			// Ported recover_text_wrapped_tool_call: the model printed its
+			// tool-call envelope as text (issue #1702). Execute the recovered
+			// calls, or nudge the model to re-issue them natively.
+			recovery := RecoverTextToolCalls(textContent.String())
+			switch recovery.Status {
+			case "recovered":
+				recoveredCalls := make([]types.ToolCall, 0, len(recovery.Calls))
+				for i, call := range recovery.Calls {
+					id := fmt.Sprintf("fallback_text_call_%d_%d", a.recoveryCounter, i+1)
+					recoveredCalls = append(recoveredCalls,
+						types.ToolCall{ID: id, Name: call.Name, Input: call.Arguments})
+				}
+				a.recoveryCounter++
+				textContent.Reset()
+				textContent.WriteString(recovery.Sanitized)
+				assistant = types.Message{Role: types.RoleAssistant,
+					Content: []types.ContentBlock{types.TextBlock(recovery.Sanitized)}}
+				toolCalls = recoveredCalls
+				if a.Hooks.OnStatus != nil {
+					names := make([]string, 0, len(recoveredCalls))
+					for _, call := range recoveredCalls {
+						names = append(names, call.Name)
+					}
+					a.Hooks.OnStatus(fmt.Sprintf(
+						"[tool-call recovery] recovered %d call(s) from text markup: %s",
+						len(recoveredCalls), strings.Join(names, ", ")))
+				}
+			case "unparseable":
+				if a.markupNudges < MaxUnparsedToolMarkupNudges {
+					a.markupNudges++
+					if a.Hooks.OnStatus != nil {
+						a.Hooks.OnStatus(UnparsedMarkupNotice(recovery.Reason))
+					}
+					a.AddMessage(types.RoleUser,
+						[]types.ContentBlock{types.TextBlock(UnparsedMarkupReminder(recovery.Reason))})
+					continue
+				}
+				// Nudges exhausted: end the turn with the raw text.
 			}
-			finalText = textContent.String()
-			return finalText, nil
+			if len(toolCalls) == 0 {
+				a.AddMessage(assistant.Role, assistant.Content)
+				if a.persistStore != nil {
+					_ = a.PersistTranscript()
+				}
+				finalText = textContent.String()
+				return finalText, nil
+			}
 		}
 		a.AddMessage(assistant.Role, assistant.Content)
 
