@@ -231,6 +231,7 @@ func BuildRegistry() *agent.Registry {
 		tools.NewReplaceTool(),
 		tools.NewApplyPatchTool(),
 		tools.NewBatchTool(),
+		tools.NewMemoryTool(),
 	} {
 		registry.Register(tool)
 	}
