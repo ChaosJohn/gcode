@@ -1,0 +1,26 @@
+cmd/gcode/commands.go
+  h_24be5f9e02d8b0 21,224-240
+cmd/gcode/main.go
+  h_24be5f9e02d8b0 50,78-79
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 1001-1039
+internal/appcore/runtime.go
+  h_24be5f9e02d8b0 16,240-244
+internal/auth/pool.go
+  h_24be5f9e02d8b0 1-228
+internal/auth/pool_test.go
+  h_24be5f9e02d8b0 1-109
+internal/provider/anthropic/oauth.go
+  h_24be5f9e02d8b0 130-134,318-322
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "784dbbdf49d9c924a43cb15189aff2b17b9ea981",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
