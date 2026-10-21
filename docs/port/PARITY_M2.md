@@ -954,3 +954,47 @@ DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打�
    gcode 的 Provider 接口不暴露 stop_reason。
 2. 上游的恢复计数遥测（RECOVERED_TEXT_WRAPPED_TOOL_CALLS 指标）以
    OnStatus 通知替代。
+
+## M4 批次九：memory 工具（跨会话记忆）
+
+移植 jcode-memory-types + jcode-base/src/memory.rs（2579 行中的存储与
+检索核心）+ tool/memory.rs（802 行中的动作面子集）。
+
+移植内容：
+
+1. **存储**（internal/memory）：项目 `~/.gcode/memory/projects/<hash>.json`
+   + 全局 `~/.gcode/memory/global.json` 两个 JSON store；Entry 字段名
+   与上游 serde 输出一致（id/category/content/tags/search_text/
+   created_at/updated_at/access_count/active/superseded_by），jcode
+   产出的 store 文件可直接解析。
+2. **remember 去重强化**（remember_in_graph 语义）：同 category +
+   trim 后同内容 → access_count++ 复用原 id，否则新增。
+3. **检索**：normalize_search_text 逐字移植（小写、-/_//\\.: → 空格、
+   空白折叠）子串匹配 content+tags；recall=recent（updated_at 降序、
+   默认 10）；format_entries_for_prompt 分节渲染
+   （Corrections/Facts/Preferences/Entities/自定义按序编号）。
+4. **forget/tag**：软删除（active=false）/幂等加标签（大小写不敏感
+   去重）+ search_text 重算。
+5. **工具面**：action remember/recall/search/list/forget/tag，输出
+   字符串逐字对拍（"Remembered <category> (<scope>): … [id: …]"、
+   "Recent memories:"、"Found N memories:"、"Memories (N):"、
+   "Forgot:/Not found:"、"Tagged memory … with: …"、
+   "No memories matching '…'"）。remember 默认 project（有工作目录），
+   其余默认 all。注册面 15 → 16 工具。
+6. 测试：存取/去重强化（store 文件 access_count 断言）/标签搜索/
+   归一化搜索/未命中/软删后 recall/双删、作用域隔离（两项目 + 全局 +
+   无工作目录默认全局）、分节渲染顺序、坏输入错误面。全绿，全仓
+   gate 通过。
+
+文档化偏差（M4 批次九）：
+
+1. **项目 store 的哈希不同**：上游 Rust DefaultHasher（SipHash-1-3，
+   不可跨实现复现）→ gcode 用 FNV-1a 64。文件格式互通（jcode 写的
+   文件可读），但按路径互相发现项目 store 不成立（两实现的项目
+   hash 不同）。全局 store 完全互通。
+2. **侧车管线未移植**：embedding 相似度（MiniLM 384 维）、LLM 相关性
+   判官、memory graph（link/related 动作）、jev/cascade 模式、后台
+   maintenance——这些依赖嵌入模型与 sidecar 进程（gcode 无此基础设施），
+   recall 的 mode 参数相应不支持（总是 recent 语义）。
+3. trust/strength/reinforcements 字段未移植（强化语义简化为
+   access_count 递增）。
