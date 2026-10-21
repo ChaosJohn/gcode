@@ -1,0 +1,22 @@
+cmd/gcode/commands_test.go
+  h_24be5f9e02d8b0 21
+internal/appcore/runtime.go
+  h_24be5f9e02d8b0 234
+internal/memory/memory.go
+  h_24be5f9e02d8b0 1-399
+internal/tools/memorytool.go
+  h_24be5f9e02d8b0 1-185
+internal/tools/memorytool_test.go
+  h_24be5f9e02d8b0 1-183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae2934e2554d08c85e282a14b317849fecf0be20",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
