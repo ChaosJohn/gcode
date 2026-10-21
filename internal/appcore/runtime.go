@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ChaosJohn/gcode/internal/agent"
+	"github.com/ChaosJohn/gcode/internal/auth"
 	"github.com/ChaosJohn/gcode/internal/base/config"
 	"github.com/ChaosJohn/gcode/internal/provider"
 	"github.com/ChaosJohn/gcode/internal/provider/anthropic"
@@ -236,6 +237,11 @@ func BuildRegistry() *agent.Registry {
 		registry.Register(tool)
 	}
 	tools.SetBatchRegistry(registry)
+	// Account-pool rotation feeds the Claude credential chain at session
+	// start (no-op without an account-pool.json).
+	anthropic.NextPoolMemberHook = func() string {
+		return auth.NextMember(auth.LoadPool())
+	}
 	return registry
 }
 

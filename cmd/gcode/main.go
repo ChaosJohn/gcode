@@ -47,6 +47,7 @@ var commands = []command{
 	{name: "import-jcode", synopsis: "import-jcode [jcode-home]", summary: "import an existing ~/.jcode home", milestone: ""},
 	{name: "doctor", synopsis: "doctor", summary: "provider and environment diagnostics", milestone: ""},
 	{name: "mcp-login", synopsis: "mcp-login <server-url>", summary: "authorize an MCP remote server (OAuth + PKCE)", milestone: ""},
+	{name: "accounts", synopsis: "accounts", summary: "list stored logins and rotation pool", milestone: ""},
 	{name: "help", synopsis: "help", summary: "show this help", milestone: ""},
 }
 
@@ -74,6 +75,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(rest, stdout, stderr)
 	case "mcp-login":
 		return runMcpLogin(rest, stdout, stderr)
+	case "accounts":
+		return runAccounts(rest, stdout, stderr)
 	case "serve":
 		c := lookup(cmd)
 		fmt.Fprintf(stderr, "gcode %s: not implemented yet — planned for %s (docs/port/PORT_PLAN.md)\n", cmd, c.milestone)

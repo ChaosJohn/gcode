@@ -998,3 +998,42 @@ DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打�
    recall 的 mode 参数相应不支持（总是 recent 语义）。
 3. trust/strength/reinforcements 字段未移植（强化语义简化为
    access_count 递增）。
+
+## M4 批次十：账户池与轮换（M2 尾项收口）
+
+移植 jcode-base/src/auth/account_pool.rs（562 行中的核心）。
+
+移植内容（internal/auth/pool.go + anthropic/oauth.go 接线）：
+
+1. **池文件**：~/.gcode/account-pool.json（members 轮换序 + excluded
+   排除名单，0600）。
+2. **登录清单**（OAuthLogins）：只读枚举本机存储登录——~/.codex/auth.json
+   （单账号，label "codex"）+ ~/.jcode/auth.json 的 anthropic_accounts
+   （多账号，label/email/expires/active 标记）；不含任何令牌材料。
+3. **轮换**（NextMember/RecordRotation）：~/.gcode/account-rotation.json
+   游标（last_key），next = 当前成员的后继（环绕）；无游标/未知 key
+   从队首开始；会话启动时经 NextPoolMemberHook 注入 Claude 凭据链
+   （account_for_route 语义：池存在时新会话取轮换成员而非 active
+   标记账号）。
+4. **429 分类器**（IsRateLimitError）：429/rate limit/rate_limit/
+   ratelimit/too many requests——供轮换触发点使用。
+5. **新命令 `gcode accounts`**：只读列出存储登录 + 池标记（*/-）+
+   active/expiry 提示。
+6. 测试：轮换游标（首成员/顺序/环绕/未知 key/空池）、池文件往返、
+   jcode store 解析（active 标记/邮箱/过期）、Describe 标记、429
+   分类。全绿，全仓 gate 通过。
+
+文档化偏差（M4 批次十）：
+
+1. **429 自动切换的触发点未接进请求循环**：分类器与轮换就绪，但
+   adapter 层尚不消费（headless 单会话内切换会导致同一回合的凭据
+   漂移；上游的切换发生在 TUI 层重试处）。随 serve/TUI 批次接线。
+2. usage 探针（auth-validation.json / usage API）未移植——上游为
+   TUI 展示面；`gcode accounts` 以静态清单替代。
+3. apply_default_account（改写 active 标记）未移植——gcode 对用户
+   的 ~/.jcode 存储保持只读，不回写。
+4. TUI 账户选择器/默认路由规则表（default_route_for_key 的
+   OAuth/API-key 路由区分）未移植（TUI 批次）。
+
+至此 M2 尾项（账户池/usage 探针/目录缓存——缓存随 agentgrep 批次
+已并入）全部收口。M0–M4 全部批次完成；剩余为 M5+（serve、TUI）。

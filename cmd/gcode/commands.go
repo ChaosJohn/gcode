@@ -18,6 +18,7 @@ import (
 
 	"github.com/ChaosJohn/gcode/internal/agent"
 	"github.com/ChaosJohn/gcode/internal/appcore"
+	"github.com/ChaosJohn/gcode/internal/auth"
 	"github.com/ChaosJohn/gcode/internal/mcp"
 	"github.com/ChaosJohn/gcode/internal/types"
 )
@@ -218,6 +219,23 @@ func shutdownServer(server *http.Server, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return server.Shutdown(ctx)
+}
+
+// runAccounts lists stored OAuth logins with pool markers (read-only).
+func runAccounts(_ []string, stdout, stderr io.Writer) int {
+	logins := auth.OAuthLogins()
+	pool := auth.LoadPool()
+	fmt.Fprintf(stdout, "gcode accounts (%d stored, pool: %d members)\n",
+		len(logins), len(pool.Members))
+	if len(logins) == 0 {
+		fmt.Fprintln(stdout, "  (none; logins live in ~/.jcode/auth.json and ~/.codex/auth.json)")
+		return exitOK
+	}
+	for _, login := range logins {
+		fmt.Fprintf(stdout, "  %s\n", auth.Describe(login, pool))
+	}
+	fmt.Fprintln(stdout, "\n  * = rotation member, - = excluded; edit ~/.gcode/account-pool.json")
+	return exitOK
 }
 
 func runDoctor(_ []string, stdout, stderr io.Writer) int {

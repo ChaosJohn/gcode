@@ -127,6 +127,11 @@ func jcodeCredentials() (ClaudeCredentials, bool) {
 		if label == "" {
 			label = auth.AnthropicAccounts[0].Label
 		}
+		// Account-pool rotation (ported account_for_route semantics): when
+		// a pool with members exists, new sessions take the next member.
+		if member := NextPoolMemberHook(); member != "" {
+			label = strings.TrimPrefix(member, "claude:")
+		}
 		for _, account := range auth.AnthropicAccounts {
 			if account.Label == label && account.Access != "" {
 				return ClaudeCredentials{
@@ -310,3 +315,8 @@ func claudeRefreshErrorIsInvalidScope(err error) bool {
 	return strings.Contains(err.Error(), "invalid_scope") ||
 		strings.Contains(err.Error(), "does not meet scope requirement")
 }
+
+// NextPoolMemberHook lets the host inject account-pool rotation without an
+// import cycle (the pool lives in internal/auth). Returns an account key
+// like "claude:work" or "".
+var NextPoolMemberHook = func() string { return "" }
