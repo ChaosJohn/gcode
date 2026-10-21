@@ -1,0 +1,18 @@
+internal/agent/agent.go
+  h_24be5f9e02d8b0 59-61,267-312
+internal/agent/recovery.go
+  h_24be5f9e02d8b0 1-363
+internal/agent/recovery_test.go
+  h_24be5f9e02d8b0 1-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6067e278c557d1d35dd87a7dac215705f680153e",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
