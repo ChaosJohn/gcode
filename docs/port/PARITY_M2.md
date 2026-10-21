@@ -916,3 +916,41 @@ jcode-compaction-core（1371 行中的核心纯函数）+ base CompactionManager
    重放随账户池批次。
 3. resource 参数（RFC 8707 resource indicator）未随 refresh/authorize
    请求发送（上游亦未发）。
+
+## M4 批次八：文本工具调用恢复（tool_markup_recovery）
+
+针对用户这类 OpenAI-compatible 端点的真实上游问题（jcode issue #1702）：
+DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打印（DSML
+`<｜DSML｜invoke name=…><parameter …>`、`to=functions.NAME {json}` 等
+变体）。移植 response_recovery.rs + tool_markup_recovery.rs（1564 行）。
+
+移植内容（internal/agent/recovery.go + agent.go 接线）：
+
+1. **信封扫描**：标签正则容忍 `｜DSML｜`/`|DSML|`/`DSML `/`antml:`
+   前缀与残缺（`</DSML parameter>`）、`function_calls`/`tool_calls`/
+   `calls` 包装、裸 invoke/parameter 对；围栏代码块（```/~~~）与反引号
+   内联引用视为文档；单个孤立标签视为散文（relevant < 2 → None）。
+2. **状态机解析**：invoke 嵌套/未闭合、无名字、孤儿 parameter、未闭合
+   parameter、闭合无开 → Unparseable{reason}（首个问题）；完整 invoke →
+   calls + sanitized_text（信封移除、前后散文保留）。
+3. **参数类型**：`string="true"` 强制字符串；无提示时 JSON 可解析保持
+   类型（解析为 string 回退原始字节，`string="false"` 除外）；其余
+   字节保留。
+4. **to=functions.NAME {json}** 标记形式：名称字符集扫描 + 每个 `{`
+   逐位 JSON 流式解码（前缀/后缀散文分离，首选后缀为空的候选）。
+5. **Agent 接线**：仅当响应无结构化 tool_calls 时触发；recovered →
+   `fallback_text_call_<n>_<i>` id、文本替换为 sanitized、工具照常执行
+   （OnStatus 通知）；unparseable → 注入 system-reminder 要求原生化重发
+   （上限 2 次，超限以原文结束回合，上游 MAX_UNPARSED_TOOL_MARKUP_NUDGES
+   语义）。
+6. 测试：DSML 正典 + 3 种残缺变体、参数类型五态、围栏/孤立标签跳过、
+   4 类 Unparseable 原因、散文保留、to=functions 形式、agent 端到端
+   （scripted 漂移 → 恢复执行 → 完成）+ nudge 两提醒后原样结束。全绿，
+   全仓 gate 通过。
+
+文档化偏差（M4 批次八）：
+
+1. stop_reason 守卫（pause_turn 等 continuation 恢复路径）未移植——
+   gcode 的 Provider 接口不暴露 stop_reason。
+2. 上游的恢复计数遥测（RECOVERED_TEXT_WRAPPED_TOOL_CALLS 指标）以
+   OnStatus 通知替代。
