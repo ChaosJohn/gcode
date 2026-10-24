@@ -1,0 +1,26 @@
+cmd/gcode/commands.go
+  h_24be5f9e02d8b0 23,136-150
+cmd/gcode/main.go
+  h_24be5f9e02d8b0 81
+cmd/gcode/main_test.go
+  h_24be5f9e02d8b0 55
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 1040-1079
+internal/appcore/runtime.go
+  h_24be5f9e02d8b0 53,55-56,272
+internal/server/server.go
+  h_24be5f9e02d8b0 1-376
+internal/server/server_test.go
+  h_24be5f9e02d8b0 1-272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39e5be501654e44d4c69a6b0660b1ee6d4282706",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
