@@ -78,9 +78,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "accounts":
 		return runAccounts(rest, stdout, stderr)
 	case "serve":
-		c := lookup(cmd)
-		fmt.Fprintf(stderr, "gcode %s: not implemented yet — planned for %s (docs/port/PORT_PLAN.md)\n", cmd, c.milestone)
-		return exitNotImpl
+		return runServe(stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "gcode: unknown command %q\n\n", cmd)
 		usage(stderr)

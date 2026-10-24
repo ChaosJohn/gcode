@@ -20,6 +20,7 @@ import (
 	"github.com/ChaosJohn/gcode/internal/appcore"
 	"github.com/ChaosJohn/gcode/internal/auth"
 	"github.com/ChaosJohn/gcode/internal/mcp"
+	"github.com/ChaosJohn/gcode/internal/server"
 	"github.com/ChaosJohn/gcode/internal/types"
 )
 
@@ -132,6 +133,21 @@ func runResume(args []string, stdout, stderr io.Writer) int {
 
 // runDoctor implements `gcode doctor`: static environment diagnostics, no
 // network calls.
+// runServe starts the harness API daemon on the runtime socket.
+func runServe(stdout, stderr io.Writer) int {
+	daemon := server.NewServer()
+	if err := daemon.Listen(); err != nil {
+		fmt.Fprintf(stderr, "gcode serve: %v\n", err)
+		return exitInternal
+	}
+	fmt.Fprintf(stdout, "gcode serve: listening on %s\n", server.SocketPath())
+	if err := daemon.Serve(); err != nil {
+		fmt.Fprintf(stderr, "gcode serve: %v\n", err)
+		return exitInternal
+	}
+	return exitOK
+}
+
 // runMcpLogin performs the interactive MCP OAuth flow: dynamic client
 // registration, a loopback redirect listener, and PKCE code exchange.
 func runMcpLogin(args []string, stdout, stderr io.Writer) int {

@@ -52,9 +52,7 @@ func TestUnknownCommand(t *testing.T) {
 // Planned commands must fail with the not-implemented code and name the
 // milestone, so scripts can distinguish "not ported yet" from misuse.
 func TestPlannedCommandsReportMilestone(t *testing.T) {
-	cases := map[string]string{
-		"serve": "M4",
-	}
+	cases := map[string]string{}
 	for cmd, milestone := range cases {
 		code, _, errOut := runForTest(t, cmd)
 		if code != exitNotImpl {

@@ -1037,3 +1037,43 @@ DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打�
 
 至此 M2 尾项（账户池/usage 探针/目录缓存——缓存随 agentgrep 批次
 已并入）全部收口。M0–M4 全部批次完成；剩余为 M5+（serve、TUI）。
+
+## M5 批次十一：serve——harness API daemon（最小可用）
+
+上游 serve 面为 jcode-harness-api（997 行协议类型）+ jcode-harness-api-server
+（9.8k 行桥接）+ jcode-app-core/src/server（5.9 万行 daemon 主体）。
+按既定策略移植**协议信封兼容的最小 daemon**（internal/server）：
+
+1. **传输**：unix socket，路径规则对拍 sockets.rs
+   （$GCODE_RUNTIME_DIR → $XDG_RUNTIME_DIR → TMPDIR/gcode-<user>），
+   api.sock；陈旧 socket 检测（活 daemon ping 占位时拒绝双启）。
+2. **帧协议**：换行分隔 JSON，`{"type":…,"id":N}` 请求信封，id 相关
+   回包 + 无 id 的流式事件（session_id 标注）——与上游一致。
+3. **请求集（8/26）**：ping→pong（capabilities+server）、hello→
+   hello_ok、list_sessions（mtime 降序 + limit）、create_session、
+   attach_session（未附着时从 store 加载转写）、get_history、
+   send_message（经 agent.RunOnce 全轮次，流式 text_delta/
+   tool_start/tool_end/tool_result + text_done + message_complete）、
+   cancel（显式 unsupported 错误面）。
+4. **事件名**：text_delta/text_done/tool_start/tool_end/tool_result
+   与上游 ApiEvent 命名一致；message_complete 为本实现的相关性收尾
+   帧（上游无对应单帧——上游由客户端按 TextDone+状态推断）。
+5. **真实 e2e**：真 unix socket 客户端测试（ping/hello、
+   list/create/attach/send_message 流断言/get_history、未知类型
+   error 面）+ 本机真 daemon 冒烟（ping/list/create 回包逐字验证）。
+6. 全仓 gate 通过。
+
+文档化偏差（M5 批次十一）：
+
+1. **18 个请求类型未实现**（ArchiveSession/RestoreSession/
+   SetRetentionPolicy/ForkSession/TransferSession/DetachSession/
+   ConfigureTools/ListTools/ToolResult/SoftInterrupt/PeekSession/
+   Clear/Rewind/PermissionResponse/ListModels/GetRuntimeInfo/
+   RuntimeCommand/自定义 tool 委托）——均回 error(unsupported)，
+   不崩连接；随需增补。
+2. 无权限审批流（PermissionDecision）与 user_response 委托；无
+   presence 探测、swarm/parent_session、edit_stats；无 resume/rewind。
+3. send_message 在未附着 id 时自动建会话（上游 headless 客户端
+   create→send 两步）；会话内串行（handle mutex），无并发轮次。
+4. ToolUseEndFor 映射为 tool_end；tool_result 以 OnToolEnd 摘要回放
+   （无逐块 result 流）。

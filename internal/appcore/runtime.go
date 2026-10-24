@@ -50,9 +50,10 @@ func LoadConfig() (*config.Config, error) {
 	return loaded, nil
 }
 
-// cliSystemPrompt is the compact base prompt for the headless CLI (the full
+// CLISystemPrompt is the compact base prompt for the headless CLI (the full
 // jcode prompt bundle ships with the TUI milestone).
-const cliSystemPrompt = `You are gcode, a coding agent in the user's repository. Work directly with the tools available to you. Prefer the read/edit/write tools over shell redirection for file changes, and agentgrep over grep -r for repository searches. Be concise.`
+// CLISystemPrompt is the compact base prompt (exported for serve).
+const CLISystemPrompt = `You are gcode, a coding agent in the user's repository. Work directly with the tools available to you. Prefer the read/edit/write tools over shell redirection for file changes, and agentgrep over grep -r for repository searches. Be concise.`
 
 // BuildProvider constructs the configured provider from available
 // credentials. Supported selectors: claude (OAuth or ANTHROPIC_API_KEY),
@@ -268,7 +269,7 @@ func Assemble(sessionID string, hooks agent.ToolHooks) (*agent.Agent, *sessionst
 		ID: sessionID, Status: "active", CreatedAt: timePtr(time.Now()),
 	}, home)
 	agentLoop := agent.NewAgent(prov, BuildRegistry())
-	agentLoop.System = cliSystemPrompt
+	agentLoop.System = CLISystemPrompt
 	agentLoop.WorkingDir, _ = os.Getwd()
 	agentLoop.Hooks = hooks
 	agentLoop.WirePersistence(store)
