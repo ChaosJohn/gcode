@@ -1,0 +1,26 @@
+cmd/gcode/main.go
+  h_24be5f9e02d8b0 20,48,58,82-83
+cmd/gcode/main_test.go
+  h_24be5f9e02d8b0 96-98,103-104
+internal/tui/chat.go
+  h_24be5f9e02d8b0 1-68
+internal/tui/term_darwin.go
+  h_24be5f9e02d8b0 1-69
+internal/tui/term_linux.go
+  h_24be5f9e02d8b0 1-67
+internal/tui/tui.go
+  h_24be5f9e02d8b0 1-384
+internal/tui/tui_test.go
+  h_24be5f9e02d8b0 1-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1581671c5e203921ac8c23fa20ca2424fa2ab27c",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
