@@ -1,0 +1,16 @@
+cmd/gcode/main.go
+  h_24be5f9e02d8b0 58,83
+internal/tui/tui.go
+  h_24be5f9e02d8b0 11,51-53,57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb50c3cfdfcc5a119515db48ad9a18367a83e897",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
