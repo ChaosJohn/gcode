@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 
 	"github.com/ChaosJohn/gcode/internal/sessionstore"
+	"github.com/ChaosJohn/gcode/internal/tui"
 	"github.com/ChaosJohn/gcode/internal/version"
 )
 
@@ -44,6 +45,7 @@ var commands = []command{
 	{name: "run", synopsis: "run <prompt>", summary: "headless single-shot agent run", milestone: ""},
 	{name: "resume", synopsis: "resume [session] [prompt]", summary: "list sessions or continue one", milestone: ""},
 	{name: "serve", synopsis: "serve", summary: "harness API server mode", milestone: "M4"},
+	{name: "tui", synopsis: "tui", summary: "interactive terminal UI (minimal)", milestone: "M7"},
 	{name: "import-jcode", synopsis: "import-jcode [jcode-home]", summary: "import an existing ~/.jcode home", milestone: ""},
 	{name: "doctor", synopsis: "doctor", summary: "provider and environment diagnostics", milestone: ""},
 	{name: "mcp-login", synopsis: "mcp-login <server-url>", summary: "authorize an MCP remote server (OAuth + PKCE)", milestone: ""},
@@ -53,9 +55,7 @@ var commands = []command{
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintf(stderr, "%s: interactive TUI lands in milestone M7; see docs/port/PORT_PLAN.md\n", version.Name)
-		usage(stderr)
-		return exitUsage
+		return tui.Run()
 	}
 
 	switch cmd, rest := args[0], args[1:]; cmd {
@@ -79,6 +79,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runAccounts(rest, stdout, stderr)
 	case "serve":
 		return runServe(stdout, stderr)
+	case "tui":
+		return tui.Run()
 	default:
 		fmt.Fprintf(stderr, "gcode: unknown command %q\n\n", cmd)
 		usage(stderr)

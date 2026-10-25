@@ -93,12 +93,14 @@ func TestImportJcodeCommand(t *testing.T) {
 	}
 }
 
-func TestNoArgsPrintsUsageAndFails(t *testing.T) {
+func TestNoArgsLaunchesTUI(t *testing.T) {
+	// Bare `gcode` now starts the TUI; under the test harness stdout is
+	// not a terminal, so the tty guard fires with the same exit code.
 	code, _, errOut := runForTest(t)
 	if code != exitUsage {
 		t.Fatalf("exit = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(errOut, "Usage:") {
-		t.Errorf("stderr = %q, want usage block", errOut)
+	if !strings.Contains(errOut, "not a terminal") {
+		t.Errorf("stderr = %q, want tty guard message", errOut)
 	}
 }
