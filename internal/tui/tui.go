@@ -8,6 +8,7 @@ package tui
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -47,12 +48,13 @@ type Model struct {
 	scrollBack int
 }
 
-// Run starts the TUI; it returns the process exit code.
-func Run() int {
+// Run starts the TUI; it returns the process exit code. Diagnostics go to
+// errOut so hosts can route them (the UI itself always uses os.Stdout).
+func Run(errOut io.Writer) int {
 	if os.Getenv("GCODE_TUI_TEST") == "" {
 		if info, err := os.Stdout.Stat(); err == nil &&
 			info.Mode()&os.ModeCharDevice == 0 {
-			fmt.Fprintln(os.Stderr, "gcode tui: stdout is not a terminal")
+			fmt.Fprintln(errOut, "gcode tui: stdout is not a terminal")
 			return 2
 		}
 	}

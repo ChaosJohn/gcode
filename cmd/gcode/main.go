@@ -55,7 +55,7 @@ var commands = []command{
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return tui.Run()
+		return tui.Run(stderr)
 	}
 
 	switch cmd, rest := args[0], args[1:]; cmd {
@@ -80,7 +80,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "serve":
 		return runServe(stdout, stderr)
 	case "tui":
-		return tui.Run()
+		return tui.Run(stderr)
 	default:
 		fmt.Fprintf(stderr, "gcode: unknown command %q\n\n", cmd)
 		usage(stderr)
