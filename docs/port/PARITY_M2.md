@@ -1077,3 +1077,38 @@ DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打�
    create→send 两步）；会话内串行（handle mutex），无并发轮次。
 4. ToolUseEndFor 映射为 tool_end；tool_result 以 OnToolEnd 摘要回放
    （无逐块 result 流）。
+
+## M5 批次十二：TUI——最小交互面
+
+上游 jcode-tui 14.6 万行；按既定拆批策略移植交互核心
+（internal/tui，零第三方依赖——模块代理在本机被拦，bubbletea
+不可用；手写 ANSI + termios raw mode，纯 Go、CGO_ENABLED=0）：
+
+1. **终端**：darwin（TIOCGETA/TIOCSETA/TIOCGWINSZ）与 linux
+   （TCGETS/TCSETS）build-tag 分支；alternate screen（\x1b[?1049h）、
+   光标隐藏/按需显示；非 TTY stdout 拒绝启动。
+2. **视图**：会话列表（mtime 列表、标题/消息数/更新时间、反色选中）
+   + 聊天视图（转写尾部 + 输入行）+ 状态栏（帮助文案随视图切换）。
+3. **键位**（对齐上游基础语义）：↑/↓ 或 k/j 导航、enter 开会话/
+   发送、esc 返回列表、backspace 删字符、ctrl-c/ctrl-d 退出、
+   ↑↓ 聊天内滚动、r 刷新会话列表。
+4. **聊天**：enter 后经 appcore 组装（同 run 命令链路：
+   provider/registry/系统提示词），RunOnce 全轮次（工具可用），
+   转写持久化；生成中输入禁发。输入行 UTF-8 组合（多字节序列
+   按字节收集后解码）。
+5. **裸 `gcode`** 现在启动 TUI（原 M7 占位）；`gcode tui` 显式入口。
+6. 测试：键序列解析（方向键/esc/enter/UTF-8/ctrl-c）、列表导航
+   边界、渲染断言（反色选中/表头/会话行）、开会话模式迁移
+   （hermetic：GCODE_HOME 隔离 + 真实 sessionstore）、输入编辑
+   与空输入守卫。全仓 gate 通过。
+
+文档化偏差（M5 批次十二）：
+
+1. **全量重绘**（无 diff 渲染、无 ratatui 双缓冲）；长转写截尾
+   显示，无分页滚动条（仅 ↑↓ 逐行回看计数，未接渲染）。
+2. 无流式增量渲染（TextDelta 暂存为 "… " 行，回合结束出全文）、
+   无 markdown/语法高亮、无工具调用面板、无 thinking 折叠。
+3. 无会话内新建/归档/重命名、无模型切换、无账户选择器、无
+   permission 提示流；生成中 esc 不可中断（提示文案说明）。
+4. 每回合后全量重画，无 resize 事件监听（以 80x24 默认兜底 +
+   每帧查询 winsize）。
