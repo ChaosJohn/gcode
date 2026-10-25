@@ -1,0 +1,18 @@
+internal/tui/term_darwin.go
+  h_24be5f9e02d8b0 12-13,15-17
+internal/tui/term_linux.go
+  h_24be5f9e02d8b0 11,13-15
+internal/tui/tui.go
+  h_24be5f9e02d8b0 61-80,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38c630cddba0c01e3f58d0910691b4a7eb44397a",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
