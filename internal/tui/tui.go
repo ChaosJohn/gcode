@@ -58,16 +58,30 @@ func Run(errOut io.Writer) int {
 			return 2
 		}
 	}
+	// Raw input needs a terminal fd. When stdin is redirected (launchers,
+	// pipes), fall back to the controlling terminal /dev/tty.
+	input := os.Stdin
+	state, err := enableRaw(input.Fd())
+	if err != nil {
+		tty, ttyErr := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if ttyErr != nil {
+			fmt.Fprintf(errOut, "gcode tui: no terminal for raw input (%v); "+
+				"run gcode inside a terminal, or use `gcode run <prompt>` for headless mode\n", err)
+			return 2
+		}
+		defer tty.Close()
+		input = tty
+		state, err = enableRaw(input.Fd())
+		if err != nil {
+			fmt.Fprintf(errOut, "gcode tui: raw mode unavailable: %v\n", err)
+			return 2
+		}
+	}
+	defer disableRaw(input.Fd(), state)
 	model := &Model{
-		Stdin:  bufio.NewReader(os.Stdin),
+		Stdin:  bufio.NewReader(input),
 		Stdout: bufio.NewWriter(os.Stdout),
 	}
-	state, err := enableRaw(os.Stdin.Fd())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gcode tui: raw mode unavailable: %v\n", err)
-		return 2
-	}
-	defer disableRaw(os.Stdin.Fd(), state)
 	model.enterScreen()
 	defer model.exitScreen()
 	model.refreshSessions()

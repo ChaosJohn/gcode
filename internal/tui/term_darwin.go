@@ -9,10 +9,12 @@ import (
 	"unsafe"
 )
 
+// Constants come from the syscall package (hand-computed ioctl direction
+// bits once shipped wrong here: TIOCSETA is 0x80487414, not 0x40487414).
 const (
-	ioctlGetTermios = 0x40487413 // TIOCGETA
-	ioctlSetTermios = 0x40487414 // TIOCSETA
-	ioctlGetWinsize = 0x40087468 // TIOCGWINSZ
+	ioctlGetTermios = syscall.TIOCGETA
+	ioctlSetTermios = syscall.TIOCSETA
+	ioctlGetWinsize = syscall.TIOCGWINSZ
 )
 
 type termState struct {

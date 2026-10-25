@@ -8,10 +8,11 @@ import (
 	"unsafe"
 )
 
+// Constants come from the syscall package.
 const (
-	ioctlGetTermios = 0x5401 // TCGETS
-	ioctlSetTermios = 0x5402 // TCSETS
-	ioctlGetWinsize = 0x5413 // TIOCGWINSZ
+	ioctlGetTermios = syscall.TCGETS
+	ioctlSetTermios = syscall.TCSETS
+	ioctlGetWinsize = syscall.TIOCGWINSZ
 )
 
 type termState struct {
