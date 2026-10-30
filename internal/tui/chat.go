@@ -1,8 +1,11 @@
 // Chat agent assembly for the TUI: in-process agent with streaming into
-// the transcript view.
+// the transcript view (streaming deltas, tool activity lines, spinner).
 package tui
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/ChaosJohn/gcode/internal/agent"
 	"github.com/ChaosJohn/gcode/internal/appcore"
 	"github.com/ChaosJohn/gcode/internal/sessionstore"
@@ -38,12 +41,38 @@ func BuildChatAgent(m *Model, store *sessionstore.Store) {
 			m.transcript = append(m.transcript, prefix+text)
 		}
 	}
+	if providerInstance != nil {
+		m.modelName = providerInstance.Model()
+	}
+	// Streaming deltas accumulate into the live pending line; the main
+	// loop redraws on wake.
 	agentInstance.Hooks.OnEvent = func(event types.StreamEvent) error {
 		switch e := event.(type) {
 		case types.TextDelta:
-			m.transcript = append(m.transcript, "… "+e.Text)
+			m.streaming.WriteString(e.Text)
+			m.wake()
 		}
 		return nil
+	}
+	// Tool activity: "⚙ name …" on start, then the completion line.
+	agentInstance.Hooks.OnToolStart = func(call types.ToolCall) {
+		m.pushTranscript(fmt.Sprintf("  ⚙ %s …", call.Name))
+	}
+	agentInstance.Hooks.OnToolEnd = func(call types.ToolCall, summary string, isErr bool) {
+		marker := "✓"
+		if isErr {
+			marker = "✗"
+		}
+		detail := strings.TrimSpace(summary)
+		runes := []rune(detail)
+		if len(runes) > 80 {
+			detail = string(runes[:79]) + "…"
+		}
+		m.pushTranscript(fmt.Sprintf("  ⚙ %s %s %s", call.Name, marker, detail))
+	}
+	agentInstance.Hooks.OnStatus = func(message string) {
+		m.statusMsg = message
+		m.wake()
 	}
 	m.handle = store
 	m.chatAgent = agentInstance

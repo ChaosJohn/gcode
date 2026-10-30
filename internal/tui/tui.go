@@ -1,8 +1,8 @@
 // Package tui is the minimal interactive terminal UI (upstream jcode-tui
 // is 146k lines; this port covers the interaction core): raw mode via
 // stdlib syscall (no cgo), alternate-screen ANSI rendering, a session
-// picker, a transcript/chat view with streaming, and the basic keymap
-// (arrows/jk navigate, enter select/send, esc back, ctrl-c quit).
+// picker, a chat view with streaming + tool activity, and the basic
+// keymap (arrows/jk navigate, enter select/send, esc back, ctrl-c quit).
 package tui
 
 import (
@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/ChaosJohn/gcode/internal/agent"
 	"github.com/ChaosJohn/gcode/internal/appcore"
@@ -26,13 +29,17 @@ const (
 	viewChat
 )
 
-// Model is the TUI state machine.
+// spinnerFrames animate the generating indicator (braille, like upstream).
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// Model is the TUI state machine. State is owned by the main loop; agent
+// callbacks and the input goroutine communicate through pushTranscript /
+// wake / events so renders never race.
 type Model struct {
 	Stdin  *bufio.Reader
 	Stdout *bufio.Writer
 
 	cols, rows int
-	refresh    bool
 
 	mode      view
 	sessions  []sessionstore.Session
@@ -40,12 +47,28 @@ type Model struct {
 	statusMsg string
 
 	// Chat state.
-	handle     *sessionstore.Store
-	chatAgent  *agent.Agent
-	transcript []string
-	input      string
-	generating bool
-	scrollBack int
+	handle      *sessionstore.Store
+	chatAgent   *agent.Agent
+	modelName   string
+	transcript  []string
+	input       string
+	generating  bool
+	scrollBack  int
+	streaming   strings.Builder
+	spinnerIdx  int
+	toolNames   map[string]string // call id -> tool name
+	toolLastIdx map[string]int    // call id -> transcript line index
+
+	// Event plumbing: the input goroutine feeds keys; agent callbacks wake
+	// the loop for redraws. Render happens on the main loop only.
+	events chan tuiEvent
+	wakeCh chan struct{}
+}
+
+// tuiEvent is one deferred input event.
+type tuiEvent struct {
+	kind string // "key", "quit"
+	key  string
 }
 
 // Run starts the TUI; it returns the process exit code. Diagnostics go to
@@ -78,25 +101,68 @@ func Run(errOut io.Writer) int {
 		}
 	}
 	defer disableRaw(input.Fd(), state)
-	model := &Model{
-		Stdin:  bufio.NewReader(input),
-		Stdout: bufio.NewWriter(os.Stdout),
+	m := &Model{
+		Stdin:       bufio.NewReader(input),
+		Stdout:      bufio.NewWriter(os.Stdout),
+		toolNames:   map[string]string{},
+		toolLastIdx: map[string]int{},
+		events:      make(chan tuiEvent, 64),
+		wakeCh:      make(chan struct{}, 1),
 	}
-	model.enterScreen()
-	defer model.exitScreen()
-	model.refreshSessions()
-	model.render()
+	m.enterScreen()
+	defer m.exitScreen()
+	m.refreshSessions()
+	m.render()
+	go m.inputLoop()
+	winch := make(chan os.Signal, 1)
+	signal.Notify(winch, syscall.SIGWINCH)
+	defer signal.Stop(winch)
+	ticker := time.NewTicker(120 * time.Millisecond)
+	defer ticker.Stop()
 	for {
-		kind, payload := model.readKey()
-		switch kind {
-		case keyQuit:
-			return 0
-		case keyResize:
-			model.render()
-		case keyOther:
-			model.handleKey(payload)
-			model.render()
+		select {
+		case ev := <-m.events:
+			if ev.kind == "quit" {
+				return 0
+			}
+			m.handleKey(ev.key)
+			m.render()
+		case <-winch:
+			m.render()
+		case <-m.wakeCh:
+			m.render()
+		case <-ticker.C:
+			if m.generating {
+				m.spinnerIdx = (m.spinnerIdx + 1) % len(spinnerFrames)
+				m.render()
+			}
 		}
+	}
+}
+
+// wake requests a redraw from any goroutine (non-blocking).
+func (m *Model) wake() {
+	select {
+	case m.wakeCh <- struct{}{}:
+	default:
+	}
+}
+
+// pushTranscript appends one line from any goroutine and wakes the loop.
+func (m *Model) pushTranscript(line string) {
+	m.transcript = append(m.transcript, line)
+	m.wake()
+}
+
+// inputLoop parses keys until EOF or quit.
+func (m *Model) inputLoop() {
+	for {
+		kind, key := m.readKey()
+		if kind == keyQuit {
+			m.events <- tuiEvent{kind: "quit"}
+			return
+		}
+		m.events <- tuiEvent{kind: "key", key: key}
 	}
 }
 
@@ -160,6 +226,12 @@ func (m *Model) readKey() (keyKind, string) {
 				return keyOther, "right"
 			case 'D':
 				return keyOther, "left"
+			case '5':
+				m.Stdin.ReadByte() // trailing ~
+				return keyOther, "pgup"
+			case '6':
+				m.Stdin.ReadByte() // trailing ~
+				return keyOther, "pgdn"
 			default:
 				return keyOther, ""
 			}
@@ -172,8 +244,7 @@ func (m *Model) readKey() (keyKind, string) {
 	}
 	// Multi-byte UTF-8: collect the raw bytes and decode the sequence.
 	raw := []byte{b}
-	extra := utf8ByteCount(b)
-	for i := 0; i < extra; i++ {
+	for i := 0; i < utf8ByteCount(b); i++ {
 		cont, err := m.Stdin.ReadByte()
 		if err != nil {
 			break
@@ -183,7 +254,20 @@ func (m *Model) readKey() (keyKind, string) {
 	return keyOther, string(raw)
 }
 
-// handleKey mutates state for a printable/semantic key.
+// utf8ByteCount returns continuation bytes expected after a lead byte.
+func utf8ByteCount(b byte) int {
+	switch {
+	case b >= 0xF0:
+		return 3
+	case b >= 0xE0:
+		return 2
+	case b >= 0xC0:
+		return 1
+	}
+	return 0
+}
+
+// handleKey mutates state for a printable/semantic key (main loop only).
 func (m *Model) handleKey(key string) {
 	switch m.mode {
 	case viewSessionList:
@@ -199,6 +283,8 @@ func (m *Model) handleKey(key string) {
 		case "r":
 			m.refreshSessions()
 			m.statusMsg = fmt.Sprintf("%d sessions", len(m.sessions))
+		case "n":
+			m.newChat()
 		case "enter":
 			m.openSelected()
 		case "esc":
@@ -214,12 +300,20 @@ func (m *Model) handleKey(key string) {
 			m.mode = viewSessionList
 			m.chatAgent = nil
 			m.handle = nil
+			m.streaming.Reset()
 			m.refreshSessions()
 		case "up":
 			m.scrollBack++
 		case "down":
 			if m.scrollBack > 0 {
 				m.scrollBack--
+			}
+		case "pgup":
+			m.scrollBack += m.rows / 2
+		case "pgdn":
+			m.scrollBack -= m.rows / 2
+			if m.scrollBack < 0 {
+				m.scrollBack = 0
 			}
 		case "backspace":
 			if len(m.input) > 0 {
@@ -234,7 +328,10 @@ func (m *Model) handleKey(key string) {
 			prompt := m.input
 			m.input = ""
 			m.generating = true
-			m.statusMsg = "generating…"
+			m.streaming.Reset()
+			m.scrollBack = 0
+			m.statusMsg = ""
+			m.pushTranscript("you › " + prompt)
 			go m.runTurn(prompt)
 		default:
 			if key != "" {
@@ -242,6 +339,19 @@ func (m *Model) handleKey(key string) {
 			}
 		}
 	}
+}
+
+// newChat attaches a fresh empty session.
+func (m *Model) newChat() {
+	store := sessionstore.NewStore(sessionstore.Session{
+		ID: appcore.NewSessionID(), Status: "active"}, appcore.GcodeHome())
+	if workingDir, err := os.Getwd(); err == nil {
+		store.Session.WorkingDir = workingDir
+	}
+	BuildChatAgent(m, store)
+	m.mode = viewChat
+	m.scrollBack = 0
+	m.statusMsg = "new session (persisted on first message)"
 }
 
 // openSelected attaches the highlighted session.
@@ -263,39 +373,44 @@ func (m *Model) openSelected() {
 
 // runTurn executes one agent turn off the input loop.
 func (m *Model) runTurn(prompt string) {
-	defer func() { m.generating = false }()
-	m.transcript = append(m.transcript, "you › "+prompt)
-	m.render()
+	defer func() {
+		m.generating = false
+		m.wake()
+	}()
 	final, err := ChatTurn(m, prompt)
 	if err != nil {
 		m.statusMsg = "error: " + err.Error()
 	} else {
 		m.statusMsg = ""
-		if strings.TrimSpace(final) != "" {
-			m.transcript = append(m.transcript, "gcode › "+final)
+		if text := strings.TrimSpace(final); text != "" {
+			m.pushTranscript("gcode › " + text)
 		}
 	}
-	m.render()
 }
 
 // --- rendering ---
 
 func (m *Model) render() {
 	m.cols, m.rows = 80, 24
-	if c, r, err := windowSize(os.Stdout.Fd()); err == nil {
+	if c, r, err := windowSize(os.Stdout.Fd()); err == nil && c >= 10 && r >= 4 {
 		m.cols, m.rows = c, r
 	}
 	var out strings.Builder
 	out.WriteString("\x1b[H\x1b[2J") // home + clear (plain, no diffing yet)
-	header := fmt.Sprintf(" gcode %s — %s", version.Version,
-		map[view]string{viewSessionList: "sessions", viewChat: "chat"}[m.mode])
+	model := ""
+	if m.mode == viewChat && m.modelName != "" {
+		model = " · " + m.modelName
+	}
+	header := fmt.Sprintf(" gcode %s — %s%s", version.Version,
+		map[view]string{viewSessionList: "sessions", viewChat: "chat"}[m.mode],
+		model)
 	out.WriteString("\x1b[7m" + pad(header, m.cols) + "\x1b[0m\r\n")
 
 	bodyRows := m.rows - 3
 	switch m.mode {
 	case viewSessionList:
 		if len(m.sessions) == 0 {
-			out.WriteString("  no sessions yet — run `gcode run <prompt>` first\r\n")
+			out.WriteString("  no sessions yet — n for a new chat\r\n")
 		}
 		for i, session := range m.sessions {
 			if i >= bodyRows-1 {
@@ -320,24 +435,28 @@ func (m *Model) render() {
 			}
 		}
 	case viewChat:
-		lines := m.chatLines(bodyRows - 2)
-		for _, line := range lines {
+		for _, line := range m.chatLines(bodyRows - 2) {
 			out.WriteString(pad(line, m.cols) + "\r\n")
+		}
+		if pending := m.streaming.String(); pending != "" {
+			out.WriteString(pad(truncate(pending, m.cols-1), m.cols) + "\r\n")
 		}
 	}
 	// Status + input rows.
 	status := m.statusMsg
-	if status == "" && m.mode == viewSessionList {
-		status = "↑/k ↓/j move · enter open · r refresh · ctrl-c quit"
-	}
-	if status == "" && m.mode == viewChat {
+	switch {
+	case m.generating:
+		status = spinnerFrames[m.spinnerIdx] + " " + status
+	case status == "" && m.mode == viewSessionList:
+		status = "↑/k ↓/j move · enter open · n new chat · r refresh · ctrl-c quit"
+	case status == "" && m.mode == viewChat:
 		status = "type a message · enter send · esc sessions · ↑↓ scroll"
 	}
 	out.WriteString("\x1b[2m" + pad(" "+status, m.cols) + "\x1b[0m\r\n")
 	if m.mode == viewChat {
 		prompt := "you › " + m.input
 		if m.generating {
-			prompt = "(generating — esc disabled mid-turn)"
+			prompt = "(generating — esc re-enables after this turn)"
 		}
 		out.WriteString("\x1b[1m" + pad(truncate(prompt, m.cols-1), m.cols) + "\x1b[0m")
 	} else {
@@ -352,16 +471,25 @@ func (m *Model) render() {
 	m.Stdout.Flush()
 }
 
-// chatLines renders the visible transcript tail.
-func (m *Model) chatLines(max int) []string {
-	if max <= 0 {
+// chatLines renders the visible transcript window (scrollBack aware).
+func (m *Model) chatLines(maxRows int) []string {
+	if maxRows <= 0 {
 		return nil
 	}
 	lines := m.transcript
-	if len(lines) > max {
-		lines = lines[len(lines)-max:]
+	end := len(lines) - m.scrollBack
+	if end < 0 {
+		// Scrolled past the top: pin to the first page.
+		end = maxRows
 	}
-	return lines
+	if end > len(lines) {
+		end = len(lines)
+	}
+	start := end - maxRows
+	if start < 0 {
+		start = 0
+	}
+	return lines[start:end]
 }
 
 func pad(text string, width int) string {
@@ -376,23 +504,10 @@ func truncate(text string, width int) string {
 	if len(runes) <= width {
 		return text
 	}
-	return string(runes[:max(0, width-1)]) + "…"
+	return string(runes[:maxInt(0, width-1)]) + "…"
 }
 
-// utf8ByteCount returns continuation bytes expected after a lead byte.
-func utf8ByteCount(b byte) int {
-	switch {
-	case b >= 0xF0:
-		return 3
-	case b >= 0xE0:
-		return 2
-	case b >= 0xC0:
-		return 1
-	}
-	return 0
-}
-
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

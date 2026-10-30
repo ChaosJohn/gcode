@@ -5,11 +5,13 @@ package tui
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/ChaosJohn/gcode/internal/sessionstore"
+	"github.com/ChaosJohn/gcode/internal/types"
 )
 
 func testModel(t *testing.T) (*Model, *bytes.Buffer) {
@@ -154,5 +156,85 @@ func TestChatInputEditing(t *testing.T) {
 	m.handleKey("down")
 	if m.scrollBack != 0 {
 		t.Fatalf("scroll: %d", m.scrollBack)
+	}
+}
+
+func TestStreamingAndToolActivity(t *testing.T) {
+	m, buf := testModel(t)
+	home := mHome(t)
+	store := sessionstore.NewStore(sessionstore.Session{
+		ID: "stream-1", Status: "active"}, home)
+	BuildChatAgent(m, store)
+	m.mode = viewChat
+
+	// Streaming deltas accumulate into the pending line.
+	m.streaming.WriteString("partial answer")
+	m.render()
+	if out := buf.String(); !strings.Contains(out, "partial answer") {
+		t.Fatalf("streaming render:\n%s", out)
+	}
+	// Tool start/end hooks append activity lines.
+	call := types.ToolCall{ID: "c1", Name: "bash"}
+	m.chatAgent.Hooks.OnToolStart(call)
+	m.chatAgent.Hooks.OnToolEnd(call, "listed 3 files", false)
+	m.chatAgent.Hooks.OnStatus("compacting…")
+	if !strings.Contains(strings.Join(m.transcript, "\n"), "⚙ bash …") ||
+		!strings.Contains(strings.Join(m.transcript, "\n"), "⚙ bash ✓ listed 3 files") {
+		t.Fatalf("tool lines: %v", m.transcript)
+	}
+	if m.statusMsg != "compacting…" {
+		t.Fatalf("status: %q", m.statusMsg)
+	}
+	// Spinner shows while generating.
+	m.generating = true
+	m.render()
+	if out := buf.String(); !strings.Contains(out, spinnerFrames[0]) {
+		t.Fatal("no spinner while generating")
+	}
+}
+
+func TestScrollBackWindow(t *testing.T) {
+	m, _ := testModel(t)
+	m.mode = viewChat
+	for i := 0; i < 50; i++ {
+		m.transcript = append(m.transcript, fmt.Sprintf("line-%02d", i))
+	}
+	window := m.chatLines(10)
+	if len(window) != 10 || window[0] != "line-40" || window[9] != "line-49" {
+		t.Fatalf("tail window: %v", window)
+	}
+	// scrollBack shifts the window up.
+	m.scrollBack = 5
+	window = m.chatLines(10)
+	if window[0] != "line-35" || window[9] != "line-44" {
+		t.Fatalf("scrolled window: %v", window)
+	}
+	// Clamped at the top.
+	m.scrollBack = 1000
+	window = m.chatLines(10)
+	if window[0] != "line-00" {
+		t.Fatalf("clamped window: %v", window)
+	}
+	// pgup/pgdn move by half a screen.
+	m.scrollBack = 0
+	m.rows = 24
+	m.handleKey("pgup")
+	if m.scrollBack != 12 {
+		t.Fatalf("pgup: %d", m.scrollBack)
+	}
+	m.handleKey("pgdn")
+	if m.scrollBack != 0 {
+		t.Fatalf("pgdn: %d", m.scrollBack)
+	}
+}
+
+func TestNewChatKey(t *testing.T) {
+	m, _ := testModel(t)
+	m.handleKey("n")
+	if m.mode != viewChat || m.chatAgent == nil || m.handle == nil {
+		t.Fatal("n should open a fresh chat")
+	}
+	if m.handle.Session.ID == "" || m.handle.Session.WorkingDir == "" {
+		t.Fatalf("session: %+v", m.handle.Session)
 	}
 }

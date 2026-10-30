@@ -1112,3 +1112,33 @@ DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打�
    permission 提示流；生成中 esc 不可中断（提示文案说明）。
 4. 每回合后全量重画，无 resize 事件监听（以 80x24 默认兜底 +
    每帧查询 winsize）。
+
+## M5 批次十三：TUI 深化——事件循环、流式渲染、工具面板
+
+在批次十二骨架上重构为事件驱动（internal/tui 全量重写）：
+
+1. **事件循环**：输入 goroutine（按键→channel）+ SIGWINCH resize
+   监听 + agent 回调 wake（非阻塞合并）+ 120ms ticker（生成态
+   spinner 动画，braille 帧）。状态只归主循环写，回调经
+   pushTranscript/wake 进入——渲染不再与 agent goroutine 竞态。
+2. **流式渲染**：TextDelta 累积进 pending 行实时上屏（原批次十二
+   为回合结束后一次性出全文）。
+3. **工具活动面板**：OnToolStart → "⚙ <name> …"，OnToolEnd →
+   "⚙ <name> ✓/✗ <摘要≤80字符>"；OnStatus 直通状态栏（压缩/重试
+   提示可见）。
+4. **滚动**：↑↓ 逐行、PgUp/PgDn 半屏，scrollBack 真正接入渲染
+   窗口（原实现字段存在但未接线），越顶钉在首页。
+5. **新建会话（n）**：列表页一键开新聊天，首条消息时落盘；表头
+   显示当前 model 名。
+6. **鲁棒性**：winsize 0×0（pty 刚创建/无控制终端）时兜底 80×24
+   ——真实冒烟中抓到并修复。
+7. **端到端验证**：本地 fake OpenAI-compatible SSE server + 真 PTY
+   （script）打字→发送→流式→最终行→会话落盘，逐帧断言；单测
+   覆盖流式累积、工具行、状态直通、spinner、滚动窗口/越顶钳制、
+   pgup/pgdn 解析、n 键。全仓 gate 通过。
+
+文档化偏差（M5 批次十三）：
+
+1. 仍为全量重绘（无 diff/双缓冲）；无 markdown/语法高亮；无
+   生成中 esc 中断（agent 循环无取消点）；无模型切换/账户选择器/
+   permission 流。转写多行内容按单行平铺（无折叠）。
