@@ -1,0 +1,20 @@
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 1115-1144
+internal/tui/chat.go
+  h_24be5f9e02d8b0 2,6-8,44-48,52-53,57-76
+internal/tui/tui.go
+  h_24be5f9e02d8b0 4-5,13,15-16,32-37,50-71,104-110,112-158,160-163,165,229-234,247,257-270,286-287,303,311-317,331-334,344-356,376-379,385-386,395,400-406,413,438,441-443,447-452,459,474-476,480-483,485-492,507,510
+internal/tui/tui_test.go
+  h_24be5f9e02d8b0 8,14,161-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1914ee3394283fa749c72c7b7aa7de3cdbedd55d",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
