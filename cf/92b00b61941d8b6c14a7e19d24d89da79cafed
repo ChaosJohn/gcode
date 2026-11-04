@@ -1,0 +1,16 @@
+internal/tui/tui.go
+  h_24be5f9e02d8b0 461-465,467
+internal/tui/tui_test.go
+  h_24be5f9e02d8b0 241-267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf92b00b61941d8b6c14a7e19d24d89da79cafed",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
