@@ -458,9 +458,13 @@ func (m *Model) render() {
 		if m.generating {
 			prompt = "(generating — esc re-enables after this turn)"
 		}
-		out.WriteString("\x1b[1m" + pad(truncate(prompt, m.cols-1), m.cols) + "\x1b[0m")
+		// Write the prompt bare and erase to end-of-line: the terminal
+		// cursor then rests right after the typed text (padding the row to
+		// full width parked the cursor at the last column).
+		visible := truncate(prompt, m.cols-1)
+		out.WriteString("\x1b[1m" + visible + "\x1b[0m\x1b[K")
 	} else {
-		out.WriteString(strings.Repeat(" ", m.cols))
+		out.WriteString(strings.Repeat(" ", m.cols) + "\x1b[K")
 	}
 	if !m.generating && m.mode == viewChat {
 		out.WriteString("\x1b[?25h")

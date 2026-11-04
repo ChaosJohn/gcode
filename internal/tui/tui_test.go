@@ -238,3 +238,30 @@ func TestNewChatKey(t *testing.T) {
 		t.Fatalf("session: %+v", m.handle.Session)
 	}
 }
+
+// The cursor must rest right after the typed text, not at the last column:
+// the input row is written bare and erased (EL), never padded to width.
+func TestCursorSitsAfterInput(t *testing.T) {
+	m, buf := testModel(t)
+	BuildChatAgent(m, sessionstore.NewStore(sessionstore.Session{
+		ID: "cursor-1", Status: "active"}, mHome(t)))
+	m.mode = viewChat
+	m.input = "hi"
+	m.render()
+	out := buf.String()
+	if !strings.Contains(out, "\x1b[1myou › hi\x1b[0m\x1b[K") {
+		t.Fatalf("input row not bare+EL:\n%q", out[len(out)-200:])
+	}
+	// No full-width padding of the prompt row: "you › hi" followed by
+	// spaces must not appear.
+	if strings.Contains(out, "you › hi ") {
+		t.Fatalf("prompt row is padded:\n%q", out[len(out)-200:])
+	}
+	// Generating row also erases instead of padding.
+	m.generating = true
+	buf.Reset()
+	m.render()
+	if !strings.Contains(buf.String(), "turn)\x1b[0m\x1b[K") {
+		t.Fatalf("generating row padded:\n%q", buf.String()[buf.Len()-160:])
+	}
+}
