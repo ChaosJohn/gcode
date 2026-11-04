@@ -1,0 +1,20 @@
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 1145-1169
+internal/tui/markdown.go
+  h_24be5f9e02d8b0 1-220
+internal/tui/markdown_test.go
+  h_24be5f9e02d8b0 1-144
+internal/tui/tui.go
+  h_24be5f9e02d8b0 157-195,373,420,425,538-539,541
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6d2833490871f6a1930f2ceeeaec096b55798c7b",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
