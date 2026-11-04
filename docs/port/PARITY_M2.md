@@ -1142,3 +1142,28 @@ DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打�
 1. 仍为全量重绘（无 diff/双缓冲）；无 markdown/语法高亮；无
    生成中 esc 中断（agent 循环无取消点）；无模型切换/账户选择器/
    permission 流。转写多行内容按单行平铺（无折叠）。
+
+## M5 批次十四：TUI 截断修复 + 轻量 markdown 渲染
+
+用户实测反馈（回答被截断、markdown 未渲染）：
+
+1. **截断根因**：整条回复按单行 transcript 条目 pad/truncate 到终端
+   宽度——超宽内容被切在屏幕边缘。修复：internal/tui/markdown.go
+   提供转义感知的可见宽度测量（visibleLen/utf8Truncate，跳过 CSI
+   序列）与按词折行（wrapLine，超长词硬切），回复在 push 时按当前
+   窗口宽度折成多行（首行 "gcode › " 前缀、悬挂缩进），用户输入
+   同样折行回显。pad/truncate 全部改为转义感知。
+2. **markdown 子集**：fenced code（暗色 │ gutter、围栏标记消隐、
+   内部不套行内样式）、# 标题加粗、-/* 与 1. 列表（• 替换 + 悬挂
+   缩进）、行内 **bold**/\x1b[3m italic\x1b[0m/`code`（按物理行套用，
+   样式不跨折行点）；闭合用精确的 22/23/27 复位码。
+3. **收尾清理**：生成态 pending 行在回合结束后清空（否则原始
+   markdown 与样式版并存）。
+4. 验证：单测（折行不丢词/宽度约束、markdown 子集、ANSI 测量与
+   截断不破坏序列、代码块折行、悬挂缩进）+ 真 PTY e2e（fake SSE
+   服务器回 markdown 长文，逐帧断言八项：加粗/斜体/行内码/gutter/
+   列表/长文折行尾部可见/无裸 **/无围栏泄漏）。全仓 gate 通过。
+
+偏差：resize 后既有行保持推送时宽度（下一条消息按新宽度）；CJK
+双宽字符按 1 列计（对齐上游 pending 改进项）；无表格/嵌套列表/
+引用块/链接渲染。

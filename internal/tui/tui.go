@@ -154,6 +154,45 @@ func (m *Model) pushTranscript(line string) {
 	m.wake()
 }
 
+// pushResponse renders a full assistant reply as wrapped, markdown-styled
+// transcript lines (prefix on the first line, hanging indent after).
+func (m *Model) pushResponse(text string) {
+	if text == "" {
+		return
+	}
+	// Reserve room for the "gcode › " prefix (8 cols) on the first line
+	// and the hanging indent on the rest.
+	width := m.cols - 10
+	if width < 20 {
+		width = 20
+	}
+	lines := RenderMarkdownLines(text, width)
+	for i, line := range lines {
+		if i == 0 {
+			m.transcript = append(m.transcript, "gcode › "+line)
+		} else {
+			m.transcript = append(m.transcript, "  "+line)
+		}
+	}
+	m.wake()
+}
+
+// pushUserEcho echoes the user prompt wrapped to the window width.
+func (m *Model) pushUserEcho(prompt string) {
+	width := m.cols - 10
+	if width < 20 {
+		width = 20
+	}
+	for i, line := range wrapLine(prompt, width) {
+		if i == 0 {
+			m.transcript = append(m.transcript, "you › "+line)
+		} else {
+			m.transcript = append(m.transcript, "      "+line)
+		}
+	}
+	m.wake()
+}
+
 // inputLoop parses keys until EOF or quit.
 func (m *Model) inputLoop() {
 	for {
@@ -331,7 +370,7 @@ func (m *Model) handleKey(key string) {
 			m.streaming.Reset()
 			m.scrollBack = 0
 			m.statusMsg = ""
-			m.pushTranscript("you › " + prompt)
+			m.pushUserEcho(prompt)
 			go m.runTurn(prompt)
 		default:
 			if key != "" {
@@ -378,13 +417,12 @@ func (m *Model) runTurn(prompt string) {
 		m.wake()
 	}()
 	final, err := ChatTurn(m, prompt)
+	m.streaming.Reset() // the raw pending line is replaced by styled rows
 	if err != nil {
 		m.statusMsg = "error: " + err.Error()
 	} else {
 		m.statusMsg = ""
-		if text := strings.TrimSpace(final); text != "" {
-			m.pushTranscript("gcode › " + text)
-		}
+		m.pushResponse(strings.TrimSpace(final))
 	}
 }
 
@@ -497,10 +535,10 @@ func (m *Model) chatLines(maxRows int) []string {
 }
 
 func pad(text string, width int) string {
-	if len(text) >= width {
-		return truncate(text, width)
+	if visibleLen(text) >= width {
+		return utf8Truncate(text, width)
 	}
-	return text + strings.Repeat(" ", width-len(text))
+	return text + strings.Repeat(" ", width-visibleLen(text))
 }
 
 func truncate(text string, width int) string {
