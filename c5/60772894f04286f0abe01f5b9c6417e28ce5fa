@@ -1,0 +1,28 @@
+docs/port/PARITY_M2.md
+  h_24be5f9e02d8b0 1170-1192
+internal/agent/agent.go
+  h_24be5f9e02d8b0 5,8,61-67,122-129,131-132,149-152,185-187,244-255
+internal/agent/agent_test.go
+  h_24be5f9e02d8b0 8,12,311-375
+internal/tui/chat.go
+  h_24be5f9e02d8b0 38-42
+internal/tui/markdown.go
+  h_24be5f9e02d8b0 28,210-211,215
+internal/tui/markdown_test.go
+  h_24be5f9e02d8b0 145-194
+internal/tui/tui.go
+  h_24be5f9e02d8b0 53,69-90,154,181,186-192,199,208,210-216,370-373,461-465
+internal/tui/width.go
+  h_24be5f9e02d8b0 1-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c560772894f04286f0abe01f5b9c6417e28ce5fa",
+  "prompts": {},
+  "humans": {
+    "h_24be5f9e02d8b0": {
+      "author": "Chaos John <chaosjohn.yjh@iclpud.com>"
+    }
+  }
+}
