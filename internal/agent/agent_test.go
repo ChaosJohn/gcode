@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/ChaosJohn/gcode/internal/provider"
 	"github.com/ChaosJohn/gcode/internal/sessionstore"
@@ -312,22 +312,23 @@ func TestPersistenceAcrossReload(t *testing.T) {
 // Interrupt mid-stream: the emit callback aborts, the partial reply is
 // returned without error, and LastInterrupted is set.
 func TestRunOnceInterrupted(t *testing.T) {
-	provider := &interruptFakeProvider{}
-	agentInstance := NewAgent(provider, NewRegistry())
+	agentInstance := NewAgent(nil, NewRegistry())
 	agentInstance.System = "test"
-	var firstDelta = make(chan struct{})
+	sawFirst := make(chan struct{})
+	var once sync.Once
+	providerInstance := &interruptFakeProvider{}
+	providerInstance.unblock = make(chan struct{})
+	agentInstance = NewAgent(providerInstance, NewRegistry())
 	agentInstance.Hooks.OnEvent = func(event types.StreamEvent) error {
 		if _, ok := event.(types.TextDelta); ok {
-			select {
-			case firstDelta <- struct{}{}:
-			default:
-			}
+			once.Do(func() { close(sawFirst) })
 		}
 		return nil
 	}
 	go func() {
-		<-firstDelta
+		<-sawFirst
 		agentInstance.Interrupt()
+		close(providerInstance.unblock)
 	}()
 	final, err := agentInstance.RunOnce("long question")
 	if err != nil {
@@ -349,7 +350,10 @@ func TestRunOnceInterrupted(t *testing.T) {
 	}
 }
 
-type interruptFakeProvider struct{ calls int }
+type interruptFakeProvider struct {
+	calls   int
+	unblock chan struct{}
+}
 
 func (p *interruptFakeProvider) Name() string              { return "fake" }
 func (p *interruptFakeProvider) Model() string             { return "fake-1" }
@@ -367,8 +371,7 @@ func (p *interruptFakeProvider) Complete(turn provider.TurnRequest,
 			return err
 		}
 		if i == 0 {
-			// Give the interrupt goroutine time to land between events.
-			time.Sleep(50 * time.Millisecond)
+			<-p.unblock // the test calls Interrupt, then closes this
 		}
 	}
 	return emit(types.MessageEnd{})
