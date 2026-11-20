@@ -142,3 +142,53 @@ func TestNumberedAndCodeWrap(t *testing.T) {
 		t.Fatalf("hanging indent: %q", lines[1])
 	}
 }
+
+func TestCJKDoubleWidth(t *testing.T) {
+	if got := visibleLen("你好"); got != 4 {
+		t.Fatalf("CJK width: %d", got)
+	}
+	if got := visibleLen("中文abc"); got != 7 {
+		t.Fatalf("mixed width: %d", got)
+	}
+	// Wrapping respects double width: 4 CJK chars = 8 cols.
+	lines := wrapLine("你好世界 hello", 10)
+	if len(lines) != 2 {
+		t.Fatalf("wrap rows: %v", lines)
+	}
+	if visibleLen(lines[0]) != 8 {
+		t.Fatalf("first row width: %d (%q)", visibleLen(lines[0]), lines[0])
+	}
+	// Truncation keeps within width.
+	cut := utf8Truncate("你好世界世界世界", 8)
+	if visibleLen(cut) > 8 {
+		t.Fatalf("CJK cut width: %d (%q)", visibleLen(cut), cut)
+	}
+}
+
+func TestRebuildTranscriptOnResize(t *testing.T) {
+	m, _ := testModel(t)
+	m.mode = viewChat
+	m.cols = 40
+	long := strings.Repeat("filler words ", 20)
+	m.pushUserEcho(long)
+	m.pushResponse(long)
+	rows40 := len(m.transcript)
+	// Grow the window: re-derive at 100 cols collapses the rows.
+	m.cols = 100
+	m.rebuildTranscript()
+	rows100 := len(m.transcript)
+	if rows100 >= rows40 {
+		t.Fatalf("resize did not re-wrap: %d -> %d rows", rows40, rows100)
+	}
+	// Content survives the re-wrap.
+	joined := strings.Join(strings.Fields(stripANSI(strings.Join(m.transcript, " "))), " ")
+	if !strings.Contains(joined, strings.Join(strings.Fields(stripANSI(long)), " ")) {
+		t.Fatal("content lost on rebuild")
+	}
+	// Tool/plain lines pass through untouched.
+	m.log = append(m.log, logEntry{kind: "tool", text: "  ⚙ bash ✓ ok"})
+	m.rebuildTranscript()
+	if !strings.Contains(strings.Join(m.transcript, "\n"), "  ⚙ bash ✓ ok") {
+		t.Fatal("tool line lost on rebuild")
+	}
+}

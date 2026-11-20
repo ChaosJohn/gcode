@@ -5,9 +5,11 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ChaosJohn/gcode/internal/provider"
 	"github.com/ChaosJohn/gcode/internal/sessionstore"
@@ -305,4 +307,69 @@ func TestPersistenceAcrossReload(t *testing.T) {
 	if last.Content[0].Text == nil || *last.Content[0].Text != "finished" {
 		t.Fatalf("final text: %+v", last.Content[0])
 	}
+}
+
+// Interrupt mid-stream: the emit callback aborts, the partial reply is
+// returned without error, and LastInterrupted is set.
+func TestRunOnceInterrupted(t *testing.T) {
+	provider := &interruptFakeProvider{}
+	agentInstance := NewAgent(provider, NewRegistry())
+	agentInstance.System = "test"
+	var firstDelta = make(chan struct{})
+	agentInstance.Hooks.OnEvent = func(event types.StreamEvent) error {
+		if _, ok := event.(types.TextDelta); ok {
+			select {
+			case firstDelta <- struct{}{}:
+			default:
+			}
+		}
+		return nil
+	}
+	go func() {
+		<-firstDelta
+		agentInstance.Interrupt()
+	}()
+	final, err := agentInstance.RunOnce("long question")
+	if err != nil {
+		t.Fatalf("interrupted turn errored: %v", err)
+	}
+	if !agentInstance.LastInterrupted {
+		t.Fatal("LastInterrupted not set")
+	}
+	if !strings.Contains(final, "partial") {
+		t.Fatalf("partial reply missing: %q", final)
+	}
+	// The next turn starts clean.
+	agentInstance.Hooks.OnEvent = nil
+	if _, err := agentInstance.RunOnce("again"); err != nil {
+		t.Fatalf("post-interrupt turn: %v", err)
+	}
+	if agentInstance.LastInterrupted {
+		t.Fatal("LastInterrupted leaked into next turn")
+	}
+}
+
+type interruptFakeProvider struct{ calls int }
+
+func (p *interruptFakeProvider) Name() string              { return "fake" }
+func (p *interruptFakeProvider) Model() string             { return "fake-1" }
+func (p *interruptFakeProvider) SetModel(string) error     { return nil }
+func (p *interruptFakeProvider) AvailableModels() []string { return nil }
+func (p *interruptFakeProvider) SupportsImageInput() bool  { return false }
+func (p *interruptFakeProvider) SupportsCompaction() bool  { return false }
+func (p *interruptFakeProvider) Fork() provider.Provider   { return p }
+func (p *interruptFakeProvider) InvalidateCredentials()    {}
+func (p *interruptFakeProvider) Complete(turn provider.TurnRequest,
+	emit func(types.StreamEvent) error) error {
+	p.calls++
+	for i := 0; i < 5; i++ {
+		if err := emit(types.TextDelta{Text: fmt.Sprintf("partial-%d ", i)}); err != nil {
+			return err
+		}
+		if i == 0 {
+			// Give the interrupt goroutine time to land between events.
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	return emit(types.MessageEnd{})
 }

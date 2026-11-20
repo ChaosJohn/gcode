@@ -34,11 +34,13 @@ func BuildChatAgent(m *Model, store *sessionstore.Store) {
 		agentInstance.AddMessage(message.Role,
 			[]types.ContentBlock{{Type: "text", Text: &text}})
 		if text != "" {
-			prefix := "gcode › "
 			if message.Role == types.RoleUser {
-				prefix = "you › "
+				m.log = append(m.log, logEntry{kind: "user", text: text})
+				m.pushUserEchoLines(text)
+			} else {
+				m.log = append(m.log, logEntry{kind: "assistant", text: text})
+				m.pushAssistantLines(text)
 			}
-			m.transcript = append(m.transcript, prefix+text)
 		}
 	}
 	if providerInstance != nil {

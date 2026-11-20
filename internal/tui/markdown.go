@@ -6,7 +6,6 @@ package tui
 
 import (
 	"strings"
-	"unicode/utf8"
 )
 
 // visibleLen measures the printed width of a string, skipping ANSI CSI
@@ -26,7 +25,7 @@ func visibleLen(text string) int {
 			}
 			continue
 		}
-		width++
+		width += runeWidth(runes[i])
 	}
 	return width
 }
@@ -208,13 +207,13 @@ func utf8Truncate(text string, width int) string {
 			}
 			continue
 		}
-		if visible >= width-1 {
+		w := runeWidth(r)
+		if visible+w > width-1 {
 			continue // skip the rest of the visible text
 		}
 		out.WriteRune(r)
-		visible++
+		visible += w
 	}
-	_ = utf8.RuneLen('…')
 	out.WriteString("…")
 	return out.String()
 }

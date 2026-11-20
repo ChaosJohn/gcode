@@ -1167,3 +1167,26 @@ DeepSeek 系端点在长上下文下偶尔把工具调用信封当纯文本打�
 偏差：resize 后既有行保持推送时宽度（下一条消息按新宽度）；CJK
 双宽字符按 1 列计（对齐上游 pending 改进项）；无表格/嵌套列表/
 引用块/链接渲染。
+
+## M5 批次十五：TUI 中断 + resize 重排 + CJK 宽度
+
+1. **生成中 esc 中断**（上游 soft-interrupt 语义）：Agent.Interrupt()
+   （atomic 标志）在 stream-event 边界（emit 回调首查，哨兵错误
+   ErrInterrupted 沿 SSE 循环传出）与工具轮边界生效；RunOnce 以
+   部分文本优雅收尾（partial 入转写、LastInterrupted 标记、无错误），
+   下一回合自动复位。TUI esc → Interrupt() + "interrupting…"，
+   收尾渲染 "⏹ interrupted" 标记行；转写持久化含部分回复。
+2. **resize 重排**：transcript 改为双层——log[] 存原始记录
+   （user/assistant/tool/plain），显示行按当前宽度推导；SIGWINCH
+   触发 rebuildTranscript() 全量重折（历史会话消息同样入 log）。
+3. **CJK 双宽列宽**：width.go 实现 wcwidth 子集（Han/Hangul/Kana/
+   全角/CJK 标点 = 2 列，组合记号 = 0），visibleLen/wrapLine/
+   utf8Truncate 全部按宽度计——中日文不再按 1 列错排。
+4. 验证：agent 中断单测（部分回复 + LastInterrupted + 下回合干净）、
+   TUI resize 重排单测（40→100 列行数收敛、内容无损、tool 行透传）、
+   CJK 宽度/折行/截断单测；真 PTY e2e：30 块慢流（0.2s/块）中
+   esc 中断——标记出现、只有部分 chunk（chunk29 不可见）、会话
+   仍可用。全仓 gate 通过。
+
+偏差：中断粒度为事件边界（非字符级即时）；resize 重排不保留
+滚动位置。

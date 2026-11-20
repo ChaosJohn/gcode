@@ -2,8 +2,10 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/ChaosJohn/gcode/internal/provider"
 	"github.com/ChaosJohn/gcode/internal/sessionstore"
@@ -56,6 +58,13 @@ type Agent struct {
 	lockedTools   []types.ToolDefinition
 	// LastUsage is the final usage report of the last turn.
 	LastUsage types.StoredTokenUsage
+	// interruptFlag lets hosts stop a running turn (checked at stream-event
+	// and tool-round boundaries).
+	interruptFlag atomic.Bool
+	// LastInterrupted reports whether the most recent turn ended via
+	// Interrupt (partial reply, no error).
+	LastInterrupted bool
+
 	// markupNudges counts re-issue reminders for unparseable markup.
 	markupNudges    int
 	recoveryCounter int
@@ -110,7 +119,17 @@ func capToolOutputForHistory(toolName string, output toolcore.ToolOutput) toolco
 
 // RunOnce appends the user message and drives turns until the model stops
 // calling tools (ported run_once + run_turn).
+// ErrInterrupted aborts the provider stream when the host interrupts a
+// running turn (upstream soft-interrupt semantics).
+var ErrInterrupted = errors.New("interrupted")
+
+// Interrupt requests a graceful stop at the next stream-event or tool-round
+// boundary. Safe to call from any goroutine.
+func (a *Agent) Interrupt() { a.interruptFlag.Store(true) }
+
 func (a *Agent) RunOnce(userMessage string) (string, error) {
+	a.interruptFlag.Store(false)
+	a.LastInterrupted = false
 	if strings.TrimSpace(userMessage) != "" {
 		a.AddMessage(types.RoleUser, []types.ContentBlock{types.TextBlock(userMessage)})
 	}
@@ -127,6 +146,10 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 		}
 		turns++
 
+		if a.interruptFlag.Load() {
+			a.LastInterrupted = true
+			return finalText, nil
+		}
 		tools := a.toolDefinitions()
 		requestMessages := append([]types.Message(nil), a.Messages...)
 		if batchNudgePending {
@@ -159,6 +182,9 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 			ShowThinking: true,
 		}
 		err := a.Provider.Complete(turn, func(event types.StreamEvent) error {
+			if a.interruptFlag.Load() {
+				return ErrInterrupted
+			}
 			if a.Hooks.OnEvent != nil {
 				if err := a.Hooks.OnEvent(event); err != nil {
 					return err
@@ -215,6 +241,18 @@ func (a *Agent) RunOnce(userMessage string) (string, error) {
 			return nil
 		})
 		if err != nil {
+			// Interrupted: keep the partial reply and end the turn cleanly
+			// (upstream soft-interrupt behavior).
+			if errors.Is(err, ErrInterrupted) {
+				a.LastInterrupted = true
+				partial := strings.TrimSpace(textContent.String())
+				if partial != "" {
+					a.AddMessage(types.RoleAssistant,
+						[]types.ContentBlock{types.TextBlock(partial)})
+					return partial, nil
+				}
+				return "", nil
+			}
 			// Ported try_auto_compact_after_context_limit: on a context-limit
 			// error, summarize the older turns and retry with the compacted
 			// history instead of failing the run.

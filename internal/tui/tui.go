@@ -50,6 +50,7 @@ type Model struct {
 	handle      *sessionstore.Store
 	chatAgent   *agent.Agent
 	modelName   string
+	log         []logEntry // originals, for re-wrapping on resize
 	transcript  []string
 	input       string
 	generating  bool
@@ -63,6 +64,28 @@ type Model struct {
 	// the loop for redraws. Render happens on the main loop only.
 	events chan tuiEvent
 	wakeCh chan struct{}
+}
+
+// logEntry is one original transcript record (display lines are derived
+// from these on push and re-derived on resize).
+type logEntry struct {
+	kind string // "user", "assistant", "tool", "plain"
+	text string
+}
+
+// rebuildTranscript re-derives display lines at the current width.
+func (m *Model) rebuildTranscript() {
+	m.transcript = nil
+	for _, entry := range m.log {
+		switch entry.kind {
+		case "user":
+			m.pushUserEchoLines(entry.text)
+		case "assistant":
+			m.pushAssistantLines(entry.text)
+		default:
+			m.transcript = append(m.transcript, entry.text)
+		}
+	}
 }
 
 // tuiEvent is one deferred input event.
@@ -128,6 +151,7 @@ func Run(errOut io.Writer) int {
 			m.handleKey(ev.key)
 			m.render()
 		case <-winch:
+			m.rebuildTranscript()
 			m.render()
 		case <-m.wakeCh:
 			m.render()
@@ -154,31 +178,42 @@ func (m *Model) pushTranscript(line string) {
 	m.wake()
 }
 
-// pushResponse renders a full assistant reply as wrapped, markdown-styled
-// transcript lines (prefix on the first line, hanging indent after).
+// pushResponse records a full assistant reply and renders it wrapped.
 func (m *Model) pushResponse(text string) {
 	if text == "" {
 		return
 	}
+	m.log = append(m.log, logEntry{kind: "assistant", text: text})
+	m.pushAssistantLines(text)
+	m.wake()
+}
+
+// pushAssistantLines derives wrapped markdown-styled display lines.
+func (m *Model) pushAssistantLines(text string) {
 	// Reserve room for the "gcode › " prefix (8 cols) on the first line
 	// and the hanging indent on the rest.
 	width := m.cols - 10
 	if width < 20 {
 		width = 20
 	}
-	lines := RenderMarkdownLines(text, width)
-	for i, line := range lines {
+	for i, line := range RenderMarkdownLines(text, width) {
 		if i == 0 {
 			m.transcript = append(m.transcript, "gcode › "+line)
 		} else {
 			m.transcript = append(m.transcript, "  "+line)
 		}
 	}
+}
+
+// pushUserEcho records the user prompt and renders it wrapped.
+func (m *Model) pushUserEcho(prompt string) {
+	m.log = append(m.log, logEntry{kind: "user", text: prompt})
+	m.pushUserEchoLines(prompt)
 	m.wake()
 }
 
-// pushUserEcho echoes the user prompt wrapped to the window width.
-func (m *Model) pushUserEcho(prompt string) {
+// pushUserEchoLines derives wrapped display lines for a user prompt.
+func (m *Model) pushUserEchoLines(prompt string) {
 	width := m.cols - 10
 	if width < 20 {
 		width = 20
@@ -190,7 +225,6 @@ func (m *Model) pushUserEcho(prompt string) {
 			m.transcript = append(m.transcript, "      "+line)
 		}
 	}
-	m.wake()
 }
 
 // inputLoop parses keys until EOF or quit.
@@ -333,7 +367,10 @@ func (m *Model) handleKey(key string) {
 		switch key {
 		case "esc":
 			if m.generating {
-				m.statusMsg = "cannot interrupt mid-turn in this version"
+				if m.chatAgent != nil {
+					m.chatAgent.Interrupt()
+					m.statusMsg = "interrupting…"
+				}
 				return
 			}
 			m.mode = viewSessionList
@@ -421,6 +458,11 @@ func (m *Model) runTurn(prompt string) {
 	if err != nil {
 		m.statusMsg = "error: " + err.Error()
 	} else {
+		if m.chatAgent != nil && m.chatAgent.LastInterrupted {
+			m.log = append(m.log, logEntry{kind: "tool",
+				text: "  ⏹ interrupted — partial reply above"})
+			m.pushTranscript("  ⏹ interrupted — partial reply above")
+		}
 		m.statusMsg = ""
 		m.pushResponse(strings.TrimSpace(final))
 	}
